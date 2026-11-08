@@ -40,18 +40,6 @@ alter table barberia.cierres_caja  add column if not exists organizacion_id uuid
 alter table barberia.gastos        add column if not exists organizacion_id uuid references barberia.organizaciones(id);
 alter table barberia.profiles      add column if not exists organizacion_id uuid references barberia.organizaciones(id);
 
--- Default: auto-fill organizacion_id from the logged-in user's profile
-alter table barberia.barberos      alter column organizacion_id set default barberia.current_org_id();
-alter table barberia.servicios     alter column organizacion_id set default barberia.current_org_id();
-alter table barberia.productos     alter column organizacion_id set default barberia.current_org_id();
-alter table barberia.clientes      alter column organizacion_id set default barberia.current_org_id();
-alter table barberia.citas         alter column organizacion_id set default barberia.current_org_id();
-alter table barberia.pagos         alter column organizacion_id set default barberia.current_org_id();
-alter table barberia.ventas        alter column organizacion_id set default barberia.current_org_id();
-alter table barberia.venta_items   alter column organizacion_id set default barberia.current_org_id();
-alter table barberia.cierres_caja  alter column organizacion_id set default barberia.current_org_id();
-alter table barberia.gastos        alter column organizacion_id set default barberia.current_org_id();
-
 -- ---------------------------------------------------------------------------
 -- 3) Migración de datos: crear org "Default" y asignar registros huérfanos
 -- ---------------------------------------------------------------------------
@@ -72,37 +60,7 @@ update barberia.gastos        set organizacion_id = '00000000-0000-0000-0000-000
 update barberia.profiles      set organizacion_id = '00000000-0000-0000-0000-000000000001' where organizacion_id is null;
 
 -- ---------------------------------------------------------------------------
--- 4) Hacer organizacion_id NOT NULL (después de migrar datos)
--- ---------------------------------------------------------------------------
-alter table barberia.barberos      alter column organizacion_id set not null;
-alter table barberia.servicios     alter column organizacion_id set not null;
-alter table barberia.productos     alter column organizacion_id set not null;
-alter table barberia.clientes      alter column organizacion_id set not null;
-alter table barberia.citas         alter column organizacion_id set not null;
-alter table barberia.pagos         alter column organizacion_id set not null;
-alter table barberia.ventas        alter column organizacion_id set not null;
-alter table barberia.venta_items   alter column organizacion_id set not null;
-alter table barberia.cierres_caja  alter column organizacion_id set not null;
-alter table barberia.gastos        alter column organizacion_id set not null;
-alter table barberia.profiles      alter column organizacion_id set not null;
-
--- ---------------------------------------------------------------------------
--- 5) Índices para performance (filtrado por tenant)
--- ---------------------------------------------------------------------------
-create index if not exists barberos_org_idx      on barberia.barberos (organizacion_id);
-create index if not exists servicios_org_idx    on barberia.servicios (organizacion_id);
-create index if not exists productos_org_idx    on barberia.productos (organizacion_id);
-create index if not exists clientes_org_idx     on barberia.clientes (organizacion_id);
-create index if not exists citas_org_idx        on barberia.citas (organizacion_id);
-create index if not exists pagos_org_idx        on barberia.pagos (organizacion_id);
-create index if not exists ventas_org_idx       on barberia.ventas (organizacion_id);
-create index if not exists venta_items_org_idx  on barberia.venta_items (organizacion_id);
-create index if not exists cierres_org_idx      on barberia.cierres_caja (organizacion_id);
-create index if not exists gastos_org_idx       on barberia.gastos (organizacion_id);
-create index if not exists profiles_org_idx     on barberia.profiles (organizacion_id);
-
--- ---------------------------------------------------------------------------
--- 6) Helpers RLS actualizados (tenant-aware)
+-- 4) Helpers RLS actualizados (tenant-aware) — ANTES de los defaults
 -- ---------------------------------------------------------------------------
 create or replace function barberia.current_org_id()
 returns uuid
@@ -114,7 +72,6 @@ as $$
   where p.id = auth.uid() and p.activo
 $$;
 
--- Reescribir is_staff / is_admin para que sean por org (sin cambios de firma)
 create or replace function barberia.is_staff()
 returns boolean
 language sql stable security definer
@@ -136,10 +93,53 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------------------
--- 7) Reescribir TODAS las policies con filtro por organizacion_id
+-- 5) Hacer organizacion_id NOT NULL + default (ahora la funcion existe)
+-- ---------------------------------------------------------------------------
+alter table barberia.barberos      alter column organizacion_id set not null;
+alter table barberia.servicios     alter column organizacion_id set not null;
+alter table barberia.productos     alter column organizacion_id set not null;
+alter table barberia.clientes      alter column organizacion_id set not null;
+alter table barberia.citas         alter column organizacion_id set not null;
+alter table barberia.pagos         alter column organizacion_id set not null;
+alter table barberia.ventas        alter column organizacion_id set not null;
+alter table barberia.venta_items   alter column organizacion_id set not null;
+alter table barberia.cierres_caja  alter column organizacion_id set not null;
+alter table barberia.gastos        alter column organizacion_id set not null;
+alter table barberia.profiles      alter column organizacion_id set not null;
+
+alter table barberia.barberos      alter column organizacion_id set default barberia.current_org_id();
+alter table barberia.servicios     alter column organizacion_id set default barberia.current_org_id();
+alter table barberia.productos     alter column organizacion_id set default barberia.current_org_id();
+alter table barberia.clientes      alter column organizacion_id set default barberia.current_org_id();
+alter table barberia.citas         alter column organizacion_id set default barberia.current_org_id();
+alter table barberia.pagos         alter column organizacion_id set default barberia.current_org_id();
+alter table barberia.ventas        alter column organizacion_id set default barberia.current_org_id();
+alter table barberia.venta_items   alter column organizacion_id set default barberia.current_org_id();
+alter table barberia.cierres_caja  alter column organizacion_id set default barberia.current_org_id();
+alter table barberia.gastos        alter column organizacion_id set default barberia.current_org_id();
+
+-- ---------------------------------------------------------------------------
+-- 6) Índices para performance
+-- ---------------------------------------------------------------------------
+create index if not exists barberos_org_idx      on barberia.barberos (organizacion_id);
+create index if not exists servicios_org_idx    on barberia.servicios (organizacion_id);
+create index if not exists productos_org_idx    on barberia.productos (organizacion_id);
+create index if not exists clientes_org_idx     on barberia.clientes (organizacion_id);
+create index if not exists citas_org_idx        on barberia.citas (organizacion_id);
+create index if not exists pagos_org_idx        on barberia.pagos (organizacion_id);
+create index if not exists ventas_org_idx       on barberia.ventas (organizacion_id);
+create index if not exists venta_items_org_idx  on barberia.venta_items (organizacion_id);
+create index if not exists cierres_org_idx      on barberia.cierres_caja (organizacion_id);
+create index if not exists gastos_org_idx       on barberia.gastos (organizacion_id);
+create index if not exists profiles_org_idx     on barberia.profiles (organizacion_id);
+
+-- ---------------------------------------------------------------------------
+-- 7) RLS por organizacion (reescribir policies)
 -- ---------------------------------------------------------------------------
 
 -- organizaciones
+alter table barberia.organizaciones enable row level security;
+
 drop policy if exists orgs_select on barberia.organizaciones;
 create policy orgs_select on barberia.organizaciones
   for select to authenticated
@@ -344,7 +344,7 @@ create policy gastos_write on barberia.gastos
   with check (organizacion_id = barberia.current_org_id() and barberia.is_admin());
 
 -- ---------------------------------------------------------------------------
--- 8) RPC crear_venta actualizada (tenant-aware)
+-- 8) RPC crear_venta tenant-aware
 -- ---------------------------------------------------------------------------
 create or replace function barberia.crear_venta(
   p_items jsonb,
@@ -393,7 +393,6 @@ begin
     raise exception 'La venta no tiene items';
   end if;
 
-  -- Validar items y calcular total con el precio actual de la BD (mismo tenant)
   for v_item in select * from jsonb_array_elements(p_items) loop
     v_producto_id := (v_item->>'producto_id')::uuid;
     v_cantidad := (v_item->>'cantidad')::int;
@@ -478,7 +477,7 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- 10) RPC para crear organizacion + perfil admin + seed (onboarding)
+-- 10) RPC crear_organizacion (onboarding)
 -- ---------------------------------------------------------------------------
 create or replace function barberia.crear_organizacion(
   p_nombre text,
@@ -540,7 +539,7 @@ revoke all on function barberia.crear_organizacion(text, text) from public, anon
 grant execute on function barberia.crear_organizacion(text, text) to authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
--- 11) Permisos de organizaciones para anon (ninguno) y authenticated
+-- 11) Permisos
 -- ---------------------------------------------------------------------------
 revoke all on schema barberia from anon;
 revoke all on all tables in schema barberia from anon;
