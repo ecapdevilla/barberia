@@ -60,7 +60,40 @@ update barberia.gastos        set organizacion_id = '00000000-0000-0000-0000-000
 update barberia.profiles      set organizacion_id = '00000000-0000-0000-0000-000000000001' where organizacion_id is null;
 
 -- ---------------------------------------------------------------------------
--- 4) Helpers RLS actualizados (tenant-aware) — ANTES de los defaults
+-- 4a) Helpers RLS tenant-aware (owns_cita, puede_vender con filtro por org)
+-- ---------------------------------------------------------------------------
+create or replace function barberia.owns_cita(p_cita_id uuid)
+returns boolean
+language sql stable security definer
+set search_path = barberia, pg_temp
+as $$
+  select exists (
+    select 1 from barberia.citas c
+    where c.id = p_cita_id
+      and c.organizacion_id = barberia.current_org_id()
+      and c.barbero_id = barberia.current_barbero_id()
+  )
+$$;
+
+create or replace function barberia.puede_vender(p_venta_id uuid)
+returns boolean
+language sql stable security definer
+set search_path = barberia, pg_temp
+as $$
+  select barberia.is_staff() and exists (
+    select 1 from barberia.ventas v
+    where v.id = p_venta_id
+      and v.organizacion_id = barberia.current_org_id()
+      and (
+        barberia.is_admin()
+        or v.barbero_id is null
+        or v.barbero_id = barberia.current_barbero_id()
+      )
+  )
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 4) Helpers RLS actualizados (tenant-aware) - ANTES de los defaults
 -- ---------------------------------------------------------------------------
 create or replace function barberia.current_org_id()
 returns uuid

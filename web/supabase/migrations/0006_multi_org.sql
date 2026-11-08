@@ -73,7 +73,8 @@ begin
   end if;
 
   update barberia.profiles
-  set organizacion_id = p_org_id
+  set organizacion_id = p_org_id,
+      rol = coalesce((select m.rol from barberia.membresias m where m.user_id = auth.uid() and m.organizacion_id = p_org_id), rol)
   where id = auth.uid();
 end;
 $$;
