@@ -198,7 +198,7 @@ export async function loadAppState(profile: Profile): Promise<AppState> {
 /* ------------------------------------------------------------------ */
 
 export type CitaInput = {
-  clienteId: string;
+  clienteId: string | null;
   barberoId: string;
   servicioId: string;
   fecha: string;
@@ -208,7 +208,7 @@ export type CitaInput = {
 };
 
 const citaToRow = (i: CitaInput) => ({
-  cliente_id: i.clienteId,
+  cliente_id: i.clienteId || null,
   barbero_id: i.barberoId,
   servicio_id: i.servicioId,
   fecha: i.fecha,
@@ -217,9 +217,15 @@ const citaToRow = (i: CitaInput) => ({
   estado: i.estado,
 });
 
-export async function createCita(input: CitaInput) {
-  const { error } = await getSupabase().from("citas").insert(citaToRow(input));
+export async function createCita(input: CitaInput): Promise<string> {
+  const { data, error } = await getSupabase()
+    .from("citas")
+    .insert(citaToRow(input))
+    .select("id")
+    .single();
   if (error) throw new Error(error.message);
+  if (!data) throw new Error("No se pudo crear la cita");
+  return data.id as string;
 }
 
 export async function updateCita(id: string, input: CitaInput) {

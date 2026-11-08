@@ -567,6 +567,99 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
     }
   };
 
+  const openWalkInModal = () => {
+    const Modal = () => {
+      const [clienteId, setClienteId] = useState("");
+      const [barberoId, setBarberoId] = useState(state.currentUser.barberoId || "");
+      const [servicioId, setServicioId] = useState("");
+      const [metodo, setMetodo] = useState("efectivo");
+      const svc = byId(state.servicios, servicioId);
+      const save = async () => {
+        if (!barberoId || !servicioId || !svc) {
+          toast("Selecciona barbero y servicio", "error");
+          return;
+        }
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, "0");
+        const mm = String(now.getMinutes()).padStart(2, "0");
+        const hora = hh + ":" + mm;
+        const horaFin = toHHMM(toMin(hora) + svc.duracion);
+        const fecha = todayStr();
+        try {
+          const citaId = await createCita({
+            clienteId: clienteId || null,
+            barberoId,
+            servicioId,
+            fecha,
+            hora,
+            horaFin,
+            estado: "atendida",
+          });
+          await registrarPago({ citaId, monto: svc.precio, metodo });
+          await reload(true);
+          closeModal();
+          toast("Atención registrada: " + fmtMoney(svc.precio), "success");
+        } catch (e) {
+          toast(errMsg(e), "error");
+        }
+      };
+      return (
+        <>
+          <div className="modal-header">
+            <div>
+              <div className="modal-title">Atención directa (sin cita)</div>
+              <div className="modal-sub">Registra un servicio atendido en el momento y cobra al instante</div>
+            </div>
+            <button className="modal-close" onClick={closeModal}><X /></button>
+          </div>
+          <div className="modal-body">
+            <div className="field">
+              <label>Cliente (opcional)</label>
+              <select value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
+                <option value="">Sin cliente / mostrador</option>
+                {state.clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Barbero</label>
+                <select value={barberoId} onChange={(e) => setBarberoId(e.target.value)}>
+                  <option value="">Selecciona...</option>
+                  {state.barberos.filter((b) => b.activo).map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label>Servicio</label>
+                <select value={servicioId} onChange={(e) => setServicioId(e.target.value)}>
+                  <option value="">Selecciona...</option>
+                  {state.servicios.filter((s) => s.activo).map((s) => <option key={s.id} value={s.id}>{s.nombre} — {fmtMoney(s.precio)}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="field">
+              <label>Método de pago</label>
+              <select value={metodo} onChange={(e) => setMetodo(e.target.value)}>
+                <option value="efectivo">Efectivo</option>
+                <option value="nequi">Nequi</option>
+                <option value="transferencia">Transferencia</option>
+              </select>
+            </div>
+            {svc && (
+              <div style={{ padding: "10px 12px", background: "var(--surface-2)", borderRadius: 10, fontSize: 13, fontWeight: 700 }}>
+                Total a cobrar: {fmtMoney(svc.precio)}
+              </div>
+            )}
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-ghost" onClick={closeModal}>Cancelar</button>
+            <button className="btn btn-success" onClick={save} disabled={!barberoId || !servicioId}><Check /> Cobrar</button>
+          </div>
+        </>
+      );
+    };
+    openModal(<Modal />);
+  };
+
   const openPagoModal = (citaId: string) => {
     const c = byId(state.citas, citaId)!;
     const svc = byId(state.servicios, c.servicioId)!;
@@ -1505,7 +1598,12 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
 
   const topbarActions = () => {
     if (view === "dashboard") {
-      return <button className="btn btn-primary" onClick={() => openCitaModal()}><Plus  /> Nueva cita</button>;
+      return (
+        <>
+          <button className="btn btn-primary" onClick={() => openCitaModal()}><Plus  /> Nueva cita</button>
+          <button className="btn btn-success" onClick={() => openWalkInModal()}><Check  /> Atención directa</button>
+        </>
+      );
     }
     if (view === "agenda") {
       return (
@@ -1520,6 +1618,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
             <button className="btn btn-ghost btn-icon" onClick={() => shiftDate(1)}><ChevronRight  /></button>
           </div>
           <button className="btn btn-primary" onClick={() => openCitaModal()}><Plus  /> Nueva cita</button>
+           <button className="btn btn-success" onClick={() => openWalkInModal()}><Check  /> Atención directa</button>
         </>
       );
     }
