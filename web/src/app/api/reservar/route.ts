@@ -6,7 +6,7 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 
 // Rate limiting simple en memoria (por IP). Para producción usar Upstash/Redis.
 const rateMap = new Map<string, { count: number; reset: number }>();
-const RATE_LIMIT = 5; // reservas por ventana
+const RATE_LIMIT = 10; // reservas por ventana
 const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hora
 
 function checkRate(ip: string): boolean {

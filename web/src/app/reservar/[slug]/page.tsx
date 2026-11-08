@@ -11,6 +11,7 @@ const SLOT_MIN = 30;
 const START_HOUR = 9;
 const END_HOUR = 20;
 
+function toMin(hhmm: string) { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; }
 function toHHMM(min: number) { return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`; }
 function fmtMoney(n: number) { return "$" + Number(n).toLocaleString("es-CO"); }
 
@@ -30,6 +31,7 @@ export default function ReservarPage() {
   const [hora, setHora] = useState("");
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
+  const [ocupados, setOcupados] = useState<{ hora: string; hora_fin: string }[]>([]);
 
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<{ barbero: string; servicio: string; fecha: string; hora: string; hora_fin: string } | null>(null);
@@ -55,15 +57,40 @@ export default function ReservarPage() {
 
   const servicio = servicios.find((s) => s.id === servicioId);
 
+  // Cargar slots ocupados cuando cambia barbero o fecha
+  useEffect(() => {
+    if (!slug || !barberoId || !fecha) {
+      setOcupados([]);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch(`/api/reservar/slots?slug=${encodeURIComponent(slug)}&barbero_id=${barberoId}&fecha=${fecha}`);
+        const data = await res.json();
+        if (res.ok) setOcupados(data.ocupados ?? []);
+      } catch {
+        setOcupados([]);
+      }
+    })();
+  }, [slug, barberoId, fecha]);
+
   // slots disponibles
   const slots: string[] = [];
-  if (fecha && barberoId) {
+  if (fecha && barberoId && servicio) {
+    const duracion = servicio.duracion;
     for (let h = START_HOUR; h < END_HOUR; h++) {
       for (let m = 0; m < 60; m += SLOT_MIN) {
         const slotMin = h * 60 + m;
-        const endSlot = slotMin + (servicio?.duracion || 30);
+        const endSlot = slotMin + duracion;
         if (endSlot <= END_HOUR * 60) {
-          slots.push(toHHMM(slotMin));
+          const slotStr = toHHMM(slotMin);
+          // verificar overlap con ocupados
+          const overlap = ocupados.some((o) => {
+            const os = toMin(o.hora);
+            const oe = toMin(o.hora_fin);
+            return slotMin < oe && endSlot > os;
+          });
+          if (!overlap) slots.push(slotStr);
         }
       }
     }
