@@ -2410,8 +2410,8 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
           <button className="btn btn-primary btn-sm" onClick={openOrgModal}><Pencil /> Editar datos</button>
         </div>
 
-        <div className="grid grid-2" style={{ marginBottom: 20 }}>
-          <div className="card">
+        {isMaster && (
+          <div className="card" style={{ marginBottom: 20 }}>
             <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Crear usuario</h3>
             <p style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 14 }}>
               Crea un usuario en Supabase Auth y le asigna perfil de barbería. Requiere
@@ -2419,6 +2419,8 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
             </p>
             <button className="btn btn-primary" onClick={openCreateUserModal}><Plus /> Nuevo usuario</button>
           </div>
+        )}
+        <div className="grid grid-2" style={{ marginBottom: 20 }}>
           <div className="card">
             <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Enlace de reservas (clientes)</h3>
             <p style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 14 }}>
