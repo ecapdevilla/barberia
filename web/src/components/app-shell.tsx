@@ -898,6 +898,68 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
     openModal(<Modal />);
   };
 
+  const openOrgModal = () => {
+    const org = state.organizacion;
+    if (!org) return;
+    const Modal = () => {
+      const [nombre, setNombre] = useState(org.nombre);
+      const [telefono, setTelefono] = useState("");
+      const [direccion, setDireccion] = useState("");
+      const [saving, setSaving] = useState(false);
+      const save = async () => {
+        const n = nombre.trim();
+        if (!n) { toast("Nombre obligatorio", "error"); return; }
+        setSaving(true);
+        try {
+          const { error } = await getSupabase()
+            .from("organizaciones")
+            .update({ nombre: n, telefono: telefono.trim() || null, direccion: direccion.trim() || null })
+            .eq("id", org.id);
+          if (error) throw new Error(error.message);
+          await reload(true);
+          closeModal();
+          toast("Barbería actualizada", "success");
+        } catch (e) {
+          toast(errMsg(e), "error");
+        } finally {
+          setSaving(false);
+        }
+      };
+      return (
+        <>
+          <div className="modal-header">
+            <div>
+              <div className="modal-title">Editar barbería</div>
+              <div className="modal-sub">Datos de tu organización</div>
+            </div>
+            <button className="modal-close" onClick={closeModal}><X /></button>
+          </div>
+          <div className="modal-body">
+            <div className="field">
+              <label>Nombre</label>
+              <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Teléfono</label>
+              <input type="text" value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="300 111 2233" />
+            </div>
+            <div className="field">
+              <label>Dirección</label>
+              <input type="text" value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="Calle 123 #45-67" />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-ghost" onClick={closeModal}>Cancelar</button>
+            <button className="btn btn-primary" onClick={save} disabled={saving}>
+              {saving ? "Guardando..." : "Guardar"}
+            </button>
+          </div>
+        </>
+      );
+    };
+    openModal(<Modal />);
+  };
+
   const openPagoModal = (citaId: string) => {
     const c = byId(state.citas, citaId)!;
     const svc = byId(state.servicios, c.servicioId)!;
@@ -2292,6 +2354,15 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
   const renderConfiguracion = () => {
     return (
       <div className="view">
+        <div className="card" style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Mi barbería</h3>
+          <div style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.8, marginBottom: 12 }}>
+            <div><strong>Nombre:</strong> {state.organizacion?.nombre || "—"}</div>
+            <div><strong>Slug:</strong> {state.organizacion?.slug || "—"}</div>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={openOrgModal}><Pencil /> Editar datos</button>
+        </div>
+
         <div className="grid grid-2" style={{ marginBottom: 20 }}>
           <div className="card">
             <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Crear usuario</h3>

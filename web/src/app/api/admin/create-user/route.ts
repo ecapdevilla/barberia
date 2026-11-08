@@ -33,12 +33,17 @@ export async function POST(req: NextRequest) {
   const { data: profile, error: profileError } = await userClient
     .schema("barberia")
     .from("profiles")
-    .select("rol, activo")
+    .select("rol, activo, organizacion_id")
     .eq("id", userData.user.id)
     .maybeSingle();
 
   if (profileError || !profile || !profile.activo || profile.rol !== "admin") {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  }
+
+  const adminOrgId = profile.organizacion_id;
+  if (!adminOrgId) {
+    return NextResponse.json({ error: "El admin no tiene organización asignada." }, { status: 400 });
   }
 
   // 2. Validar body
@@ -87,7 +92,7 @@ export async function POST(req: NextRequest) {
     .schema("barberia")
     .from("profiles")
     .upsert(
-      { id: userId, nombre, rol, barbero_id: barberoId, activo: true },
+      { id: userId, nombre, rol, barbero_id: barberoId, organizacion_id: adminOrgId, activo: true },
       { onConflict: "id" }
     );
 
