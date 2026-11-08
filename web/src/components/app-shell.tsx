@@ -168,6 +168,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [searchCliente, setSearchCliente] = useState("");
   const [analisisPeriodo, setAnalisisPeriodo] = useState<"7" | "30" | "all">("7");
+  const [analisisBarbero, setAnalisisBarbero] = useState<string>("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const reload = useCallback(
@@ -1617,12 +1618,30 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
     }
     const inRange = (fecha: string) => days.includes(fecha.split("T")[0]);
 
-    const pagosR = state.pagos.filter((p) => inRange(p.fecha));
-    const ventasR = state.ventas.filter((v) => inRange(v.fecha));
-    const citasR = state.citas.filter((c) => inRange(c.fecha));
+    const filtrarBarberoPago = (p: (typeof state.pagos)[number]) => {
+      if (!analisisBarbero) return true;
+      const c = byId(state.citas, p.citaId);
+      return c?.barberoId === analisisBarbero;
+    };
+    const pagosR = state.pagos.filter((p) => inRange(p.fecha) && filtrarBarberoPago(p));
+    const ventasR = state.ventas.filter((v) => inRange(v.fecha) && (!analisisBarbero || v.barberoId === analisisBarbero));
+    const citasR = state.citas.filter((c) => inRange(c.fecha) && (!analisisBarbero || c.barberoId === analisisBarbero));
 
     const totalIngresos = pagosR.reduce((a, p) => a + p.monto, 0) + ventasR.reduce((a, v) => a + v.total, 0);
     const ticketProm = (pagosR.length + ventasR.length) ? Math.round(totalIngresos / (pagosR.length + ventasR.length)) : 0;
+
+    // periodo anterior (misma longitud, desplazado)
+    const prevDays: string[] = [];
+    for (let i = dias * 2 - 1; i >= dias; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      prevDays.push(d.toISOString().split("T")[0]);
+    }
+    const inPrev = (fecha: string) => prevDays.includes(fecha.split("T")[0]);
+    const prevPagos = state.pagos.filter((p) => inPrev(p.fecha) && filtrarBarberoPago(p));
+    const prevVentas = state.ventas.filter((v) => inPrev(v.fecha) && (!analisisBarbero || v.barberoId === analisisBarbero));
+    const totalPrev = prevPagos.reduce((a, p) => a + p.monto, 0) + prevVentas.reduce((a, v) => a + v.total, 0);
+    const deltaPct = totalPrev > 0 ? Math.round(((totalIngresos - totalPrev) / totalPrev) * 100) : null;
     const citasAtendidas = citasR.filter((c) => c.estado === "atendida").length;
 
     const porBarbero = state.barberos.map((b) => ({
@@ -1672,12 +1691,35 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
 
     return (
       <div className="view">
-        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
           {(["7", "30", "all"] as const).map((p) => (
             <button key={p} className={"btn btn-sm " + (analisisPeriodo === p ? "btn-primary" : "btn-ghost")} onClick={() => setAnalisisPeriodo(p)}>
               {p === "7" ? "7 dias" : p === "30" ? "30 dias" : "Todo"}
             </button>
           ))}
+          <select value={analisisBarbero} onChange={(e) => setAnalisisBarbero(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}>
+            <option value="">Todos los barberos</option>
+            {state.barberos.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+          </select>
+          <button className="btn btn-ghost btn-sm" onClick={() => {
+            const rows = ["barbero,total,citas"];
+            porBarbero.forEach((x) => rows.push(x.barbero.nombre + "," + x.total + "," + x.citas));
+            rows.push("");
+            rows.push("servicio,cantidad,ingreso");
+            porServicio.forEach((x) => rows.push(x.servicio.nombre + "," + x.count + "," + x.ingreso));
+            rows.push("");
+            rows.push("metodo,monto");
+            metodoEntries.forEach(([m, amt]) => rows.push(m + "," + amt));
+            const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "analisis-" + new Date().toISOString().slice(0, 10) + ".csv";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }}>Exportar CSV</button>
         </div>
 
         <div className="grid grid-4" style={{ marginBottom: 20 }}>
@@ -1685,7 +1727,14 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
             <div className="stat-icon green"><DollarSign /></div>
             <div className="stat-label">Ingresos totales</div>
             <div className="stat-value">{fmtMoney(totalIngresos)}</div>
-            <div className="stat-hint">{analisisPeriodo === "all" ? "Historico" : "Ultimos " + analisisPeriodo + " dias"}</div>
+            <div className="stat-hint">
+              {analisisPeriodo === "all" ? "Historico" : "Ultimos " + analisisPeriodo + " dias"}
+              {deltaPct !== null && (
+                <span style={{ marginLeft: 8, color: deltaPct >= 0 ? "var(--success)" : "var(--danger)", fontWeight: 700 }}>
+                  {deltaPct >= 0 ? "+" : ""}{deltaPct}% vs periodo anterior
+                </span>
+              )}
+            </div>
           </div>
           <div className="card stat-card">
             <div className="stat-icon purple"><Calendar /></div>
