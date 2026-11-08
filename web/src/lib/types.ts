@@ -8,7 +8,7 @@ export type VentaItem = { productoId: string; cantidad: number; precioUnitario: 
 export type Venta = { id: string; fecha: string; items: VentaItem[]; total: number; metodo: string; clienteId: string | null; barberoId: string | null; citaId: string | null };
 export type Cierre = { id: string; fecha: string; totalEfectivo: number; totalDigital: number; totalEsperado: number; diferencia: number; notas: string; cerradoEn: string };
 export type Gasto = { id: string; fecha: string; concepto: string; categoria: string; monto: number; barberoId: string | null; productoId: string | null; cantidad: number; notas: string };
-export type CurrentUser = { id: string; nombre: string; rol: string; avatar?: string; barberoId?: string; organizacionId?: string };
+export type CurrentUser = { id: string; nombre: string; rol: string; avatar?: string; barberoId?: string; organizacionId?: string; master?: boolean };
 export type Profile = {
   id: string;
   nombre: string;
@@ -16,6 +16,7 @@ export type Profile = {
   barbero_id: string | null;
   organizacion_id: string | null;
   activo: boolean;
+  master: boolean;
 };
 export type Organizacion = { id: string; nombre: string; slug: string };
 export type AppState = {

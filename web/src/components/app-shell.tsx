@@ -125,7 +125,7 @@ export default function AppShell() {
     setCheckingProfile(true);
     getSupabase()
       .from("profiles")
-      .select("id, nombre, rol, barbero_id, activo")
+      .select("id, nombre, rol, barbero_id, organizacion_id, activo, master")
       .eq("id", sessionUser.id)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -2379,8 +2379,28 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
   };
 
   const renderConfiguracion = () => {
+    const isMaster = state.currentUser.master === true;
     return (
       <div className="view">
+        {isMaster && (
+          <div className="card" style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Códigos de invitación (master)</h3>
+            <p style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 14 }}>
+              Genera un código para que otra persona pueda crear su barbería. Compártelo con el cliente.
+            </p>
+            <button className="btn btn-primary btn-sm" onClick={async () => {
+              try {
+                const { generarInvitacion } = await import("@/lib/data");
+                const code = await generarInvitacion(30);
+                toast("Código generado: " + code, "success");
+                await navigator.clipboard.writeText(code).catch(() => {});
+              } catch (e) {
+                toast(errMsg(e), "error");
+              }
+            }}>Generar código (30 días)</button>
+          </div>
+        )}
+
         <div className="card" style={{ marginBottom: 20 }}>
           <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Mi barbería</h3>
           <div style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.8, marginBottom: 12 }}>

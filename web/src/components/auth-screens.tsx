@@ -162,6 +162,7 @@ export function CreateOrgScreen({
   onCreated: () => void;
   onSignOut: () => void;
 }) {
+  const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
   const [slug, setSlug] = useState("");
   const [loading, setLoading] = useState(false);
@@ -171,15 +172,16 @@ export function CreateOrgScreen({
     e.preventDefault();
     const n = nombre.trim();
     const s = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
-    if (!n || !s) {
-      setError("Nombre y slug son obligatorios.");
+    const c = codigo.trim().toUpperCase();
+    if (!c || !n || !s) {
+      setError("Código, nombre y slug son obligatorios.");
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const { crearOrganizacion } = await import("@/lib/data");
-      await crearOrganizacion(n, s);
+      const { usarInvitacion } = await import("@/lib/data");
+      await usarInvitacion(c, n, s);
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo crear la barbería.");
@@ -207,6 +209,17 @@ export function CreateOrgScreen({
         )}
 
         <div className="auth-form">
+          <div className="field">
+            <label htmlFor="orgcodigo">Código de invitación</label>
+            <input
+              id="orgcodigo"
+              type="text"
+              value={codigo}
+              onChange={(e) => setCodigo(e.target.value)}
+              placeholder="INV-XXXX-XXXX"
+              disabled={loading}
+            />
+          </div>
           <div className="field">
             <label htmlFor="orgnombre">Nombre de la barbería</label>
             <input

@@ -185,6 +185,7 @@ export function currentUserFromProfile(profile: Profile) {
     avatar: initials(profile.nombre),
     barberoId: profile.barbero_id ?? undefined,
     organizacionId: profile.organizacion_id ?? undefined,
+    master: profile.master ?? false,
   };
 }
 
@@ -489,6 +490,22 @@ export async function getUserOrgs(userId: string): Promise<{ id: string; nombre:
 export async function cambiarOrgActiva(orgId: string) {
   const { error } = await getSupabase().rpc("cambiar_org_activa", { p_org_id: orgId });
   if (error) throw new Error(error.message);
+}
+
+export async function generarInvitacion(expiraDias: number = 30): Promise<string> {
+  const { data, error } = await getSupabase().rpc("generar_invitacion", { p_expira_dias: expiraDias });
+  if (error) throw new Error(error.message);
+  return data as string;
+}
+
+export async function usarInvitacion(codigo: string, nombreOrg: string, slug: string): Promise<string> {
+  const { data, error } = await getSupabase().rpc("usar_invitacion", {
+    p_codigo: codigo,
+    p_nombre_org: nombreOrg,
+    p_slug: slug,
+  });
+  if (error) throw new Error(error.message);
+  return data as string;
 }
 
 export async function crearOrganizacion(nombre: string, slug: string): Promise<string> {
