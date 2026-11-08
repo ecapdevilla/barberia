@@ -21,6 +21,11 @@ import {
   updateProducto,
   deleteProducto as apiDeleteProducto,
   crearVenta,
+  createBarbero,
+  updateBarbero,
+  deleteBarbero,
+  createGasto,
+  deleteGasto,
 } from "@/lib/data";
 import { LoginScreen, LoadingScreen, ConfigScreen, NoProfileScreen } from "./auth-screens";
 import {
@@ -28,7 +33,7 @@ import {
   LayoutDashboard, Calendar, Users, Scissors, User, Wallet, BarChart3,
   Menu, CalendarDays, Banknote, Smartphone, ArrowLeftRight, DollarSign,
   Clock, XCircle, CheckCircle2, Info, AlertTriangle, Package, ShoppingBag,
-  LogOut, RefreshCw, TrendingUp, Settings
+  LogOut, RefreshCw, TrendingUp, Settings, Receipt, HandCoins
 } from "lucide-react";
 
 const VIEW_META: Record<string, { title: string; sub: string }> = {
@@ -43,6 +48,8 @@ const VIEW_META: Record<string, { title: string; sub: string }> = {
   reportes: { title: "Reportes", sub: "Métricas del negocio" },
   analisis: { title: "Análisis", sub: "Análisis avanzado de datos" },
   config: { title: "Configuración", sub: "Usuarios, respaldo y ajustes" },
+  gastos: { title: "Gastos", sub: "Gastos y compras" },
+  liquidacion: { title: "Liquidación", sub: "Liquidación de barberos" },
 };
 
 type Toast = { id: string; msg: string; type: "success" | "error" | "info" };
@@ -64,6 +71,7 @@ function emptyState(profile: Profile): AppState {
     pagos: [],
     ventas: [],
     cierres: [],
+    gastos: [],
   };
 }
 
@@ -242,7 +250,29 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
         <Users  />
         <span>Clientes</span>
       </button>
-      <div className="nav-section-label">Administración</div>
+      <div className="nav-section-label">Ventas y Caja</div>
+      <button className={"nav-item" + (view === "ventas" ? " active" : "")} onClick={() => setViewFn("ventas")}>
+        <ShoppingBag />
+        <span>Ventas</span>
+      </button>
+      <button className={"nav-item" + (view === "caja" ? " active" : "")} onClick={() => setViewFn("caja")}>
+        <Wallet  />
+        <span>Caja</span>
+      </button>
+      <button className={"nav-item" + (view === "gastos" ? " active" : "")} onClick={() => setViewFn("gastos")}>
+        <Receipt  />
+        <span>Gastos</span>
+      </button>
+      <div className="nav-section-label">Equipo</div>
+      <button className={"nav-item" + (view === "barberos" ? " active" : "")} onClick={() => setViewFn("barberos")}>
+        <User  />
+        <span>Barberos</span>
+      </button>
+      <button className={"nav-item" + (view === "liquidacion" ? " active" : "")} onClick={() => setViewFn("liquidacion")}>
+        <HandCoins  />
+        <span>Liquidación</span>
+      </button>
+      <div className="nav-section-label">Catálogo</div>
       <button className={"nav-item" + (view === "servicios" ? " active" : "")} onClick={() => setViewFn("servicios")}>
         <Scissors  />
         <span>Servicios</span>
@@ -251,18 +281,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
         <Package />
         <span>Productos</span>
       </button>
-      <button className={"nav-item" + (view === "ventas" ? " active" : "")} onClick={() => setViewFn("ventas")}>
-        <ShoppingBag />
-        <span>Ventas</span>
-      </button>
-      <button className={"nav-item" + (view === "barberos" ? " active" : "")} onClick={() => setViewFn("barberos")}>
-        <User  />
-        <span>Barberos</span>
-      </button>
-      <button className={"nav-item" + (view === "caja" ? " active" : "")} onClick={() => setViewFn("caja")}>
-        <Wallet  />
-        <span>Caja</span>
-      </button>
+      <div className="nav-section-label">Análisis</div>
       <button className={"nav-item" + (view === "reportes" ? " active" : "")} onClick={() => setViewFn("reportes")}>
         <BarChart3  />
         <span>Reportes</span>
@@ -271,6 +290,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
         <TrendingUp  />
         <span>Análisis</span>
       </button>
+      <div className="nav-section-label">Sistema</div>
       <button className={"nav-item" + (view === "config" ? " active" : "")} onClick={() => setViewFn("config")}>
         <Settings  />
         <span>Configuración</span>
@@ -669,6 +689,197 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
           <div className="modal-footer">
             <button className="btn btn-ghost" onClick={closeModal}>Cancelar</button>
             <button className="btn btn-success" onClick={save} disabled={!barberoId || !servicioId}><Check /> Cobrar</button>
+          </div>
+        </>
+      );
+    };
+    openModal(<Modal />);
+  };
+
+  const openBarberoModal = (id: string | null = null) => {
+    const b = id ? byId(state.barberos, id) : null;
+    const Modal = () => {
+      const [nombre, setNombre] = useState(b?.nombre || "");
+      const [color, setColor] = useState(b?.color || "#8b5cf6");
+      const [telefono, setTelefono] = useState(b?.telefono || "");
+      const [comision, setComision] = useState(b?.comisionPct ?? 50);
+      const [activo, setActivo] = useState(b?.activo ?? true);
+      const save = async () => {
+        const n = nombre.trim();
+        if (!n) { toast("Nombre obligatorio", "error"); return; }
+        try {
+          if (id) {
+            await updateBarbero(id, { nombre: n, color, telefono: telefono.trim(), comisionPct: comision, activo });
+            toast("Barbero actualizado", "success");
+          } else {
+            await createBarbero({ nombre: n, color, telefono: telefono.trim(), comisionPct: comision });
+            toast("Barbero creado", "success");
+          }
+          await reload(true);
+          closeModal();
+        } catch (e) {
+          toast(errMsg(e), "error");
+        }
+      };
+      const del = async () => {
+        if (!id || !confirm("Eliminar este barbero?")) return;
+        try {
+          await deleteBarbero(id);
+          await reload(true);
+          closeModal();
+          toast("Barbero eliminado", "info");
+        } catch (e) {
+          toast(errMsg(e), "error");
+        }
+      };
+      return (
+        <>
+          <div className="modal-header">
+            <div>
+              <div className="modal-title">{b ? "Editar barbero" : "Nuevo barbero"}</div>
+              <div className="modal-sub">Define nombre, color y comision</div>
+            </div>
+            <button className="modal-close" onClick={closeModal}><X /></button>
+          </div>
+          <div className="modal-body">
+            <div className="field">
+              <label>Nombre</label>
+              <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Carlos Ruiz" />
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Color</label>
+                <input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ height: 40, padding: 4 }} />
+              </div>
+              <div className="field">
+                <label>Telefono</label>
+                <input type="text" value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="300 111 2233" />
+              </div>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Comision (%)</label>
+                <input type="number" min={0} max={100} value={comision} onChange={(e) => setComision(Number(e.target.value))} />
+              </div>
+              {b && (
+                <div className="field">
+                  <label>Activo</label>
+                  <select value={activo ? "1" : "0"} onChange={(e) => setActivo(e.target.value === "1")}>
+                    <option value="1">Activo</option>
+                    <option value="0">Inactivo</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="modal-footer">
+            {b && <button className="btn btn-danger" onClick={del} style={{ marginRight: "auto" }}><Trash2 /> Eliminar</button>}
+            <button className="btn btn-ghost" onClick={closeModal}>Cancelar</button>
+            <button className="btn btn-primary" onClick={save}><Check /> Guardar</button>
+          </div>
+        </>
+      );
+    };
+    openModal(<Modal />);
+  };
+
+  const openGastoModal = () => {
+    const Modal = () => {
+      const [fecha, setFecha] = useState(todayStr());
+      const [concepto, setConcepto] = useState("");
+      const [categoria, setCategoria] = useState("operativo");
+      const [monto, setMonto] = useState(0);
+      const [barberoId, setBarberoId] = useState("");
+      const [productoId, setProductoId] = useState("");
+      const [cantidad, setCantidad] = useState(1);
+      const [notas, setNotas] = useState("");
+      const save = async () => {
+        const c = concepto.trim();
+        if (!c || monto <= 0) { toast("Concepto y monto obligatorios", "error"); return; }
+        if (categoria === "inventario" && (!productoId || cantidad <= 0)) {
+          toast("Selecciona producto y cantidad", "error"); return;
+        }
+        try {
+          await createGasto({
+            fecha,
+            concepto: c,
+            categoria,
+            monto,
+            barberoId: barberoId || null,
+            productoId: categoria === "inventario" ? productoId : null,
+            cantidad: categoria === "inventario" ? cantidad : 0,
+            notas: notas.trim(),
+          });
+          await reload(true);
+          closeModal();
+          toast("Gasto registrado", "success");
+        } catch (e) {
+          toast(errMsg(e), "error");
+        }
+      };
+      return (
+        <>
+          <div className="modal-header">
+            <div>
+              <div className="modal-title">Nuevo gasto / compra</div>
+              <div className="modal-sub">Registra un gasto operativo o una compra de inventario</div>
+            </div>
+            <button className="modal-close" onClick={closeModal}><X /></button>
+          </div>
+          <div className="modal-body">
+            <div className="field-row">
+              <div className="field">
+                <label>Fecha</label>
+                <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Categoria</label>
+                <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+                  <option value="operativo">Operativo (renta, servicios, etc.)</option>
+                  <option value="inventario">Compra de inventario</option>
+                  <option value="liquidacion">Liquidacion de barbero</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+            </div>
+            <div className="field">
+              <label>Concepto</label>
+              <input type="text" value={concepto} onChange={(e) => setConcepto(e.target.value)} placeholder="Ej: Renta del local" />
+            </div>
+            <div className="field">
+              <label>Monto (COP)</label>
+              <input type="number" min={0} value={monto} onChange={(e) => setMonto(Number(e.target.value))} />
+            </div>
+            {categoria === "inventario" && (
+              <div className="field-row">
+                <div className="field">
+                  <label>Producto</label>
+                  <select value={productoId} onChange={(e) => setProductoId(e.target.value)}>
+                    <option value="">Selecciona...</option>
+                    {state.productos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Cantidad</label>
+                  <input type="number" min={1} value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} />
+                </div>
+              </div>
+            )}
+            <div className="field">
+              <label>Barbero (opcional)</label>
+              <select value={barberoId} onChange={(e) => setBarberoId(e.target.value)}>
+                <option value="">Sin barbero</option>
+                {state.barberos.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Notas</label>
+              <input type="text" value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Observaciones..." />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-ghost" onClick={closeModal}>Cancelar</button>
+            <button className="btn btn-primary" onClick={save}><Check /> Registrar gasto</button>
           </div>
         </>
       );
@@ -1366,8 +1577,9 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
                   <div style={{ fontSize: 20, fontWeight: 800 }}>{fmtMoney(ingresosHoy)}</div>
                 </div>
               </div>
-              <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--text-3)" }}>
-                Horario: 09:00 – 20:00 · Lunes a Sábado
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--text-3)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>Comisión: {b.comisionPct}% · {b.activo ? "Activo" : "Inactivo"}</span>
+                <button className="btn btn-ghost btn-sm" onClick={() => openBarberoModal(b.id)}><Pencil /> Editar</button>
               </div>
             </div>
           );
@@ -1485,7 +1697,6 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
     );
   };
 
-  // ---------- REPORTES VIEW ----------
   const renderReportes = () => {
     const hoy = todayStr();
     const desde = reportesDesde || (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().split("T")[0]; })();
@@ -1565,7 +1776,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
               </select>
             </div>
             <div className="field" style={{ margin: 0 }}>
-              <label style={{ fontSize: 11, color: "var(--text-3)" }}>Método</label>
+              <label style={{ fontSize: 11, color: "var(--text-3)" }}>Metodo</label>
               <select value={reportesMetodo} onChange={(e) => setReportesMetodo(e.target.value)} style={{ padding: "6px 8px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}>
                 <option value="">Todos</option>
                 <option value="efectivo">Efectivo</option>
@@ -1580,15 +1791,15 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
         <div className="grid grid-3" style={{ marginBottom: 20 }}>
           <div className="card stat-card">
             <div className="stat-icon green"><DollarSign /></div>
-            <div className="stat-label">Ingresos del período</div>
+            <div className="stat-label">Ingresos del periodo</div>
             <div className="stat-value">{fmtMoney(totalPeriodo)}</div>
-            <div className="stat-hint">{desde} → {hasta}</div>
+            <div className="stat-hint">{desde} a {hasta}</div>
           </div>
           <div className="card stat-card">
             <div className="stat-icon purple"><Calendar /></div>
             <div className="stat-label">Citas atendidas</div>
             <div className="stat-value">{citasF.filter((c) => c.estado === "atendida").length}</div>
-            <div className="stat-hint">En el período</div>
+            <div className="stat-hint">En el periodo</div>
           </div>
           <div className="card stat-card">
             <div className="stat-icon blue"><Clock /></div>
@@ -1599,7 +1810,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
         </div>
 
         <div className="card" style={{ marginBottom: 20 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>Ingresos por día</h3>
+          <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>Ingresos por dia</h3>
           <div className="bar-chart">
             {days.map((d, i) => {
               const h = (ingresosPorDia[i] / maxIngreso) * 100;
@@ -1632,7 +1843,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
             {porBarbero.length === 0 && <div style={{ fontSize: 13, color: "var(--text-3)" }}>Sin datos</div>}
           </div>
           <div className="card">
-            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Métodos de pago</h3>
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Metodos de pago</h3>
             {metodoEntries.map(([metodo, monto]) => (
               <div key={metodo} style={{ marginBottom: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
@@ -1644,13 +1855,13 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
                 </div>
               </div>
             ))}
-            {metodoEntries.length === 0 && <div style={{ fontSize: 13, color: "var(--text-3)" }}>Sin pagos en el período</div>}
+            {metodoEntries.length === 0 && <div style={{ fontSize: 13, color: "var(--text-3)" }}>Sin pagos en el periodo</div>}
           </div>
         </div>
 
         <div className="grid grid-2" style={{ marginBottom: 20 }}>
           <div className="card">
-            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Servicios más solicitados</h3>
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Servicios mas solicitados</h3>
             {porServicio.map((x) => (
               <div key={x.servicio.id} style={{ marginBottom: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
@@ -1665,7 +1876,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
             {porServicio.every((x) => x.count === 0) && <div style={{ fontSize: 13, color: "var(--text-3)" }}>Sin servicios</div>}
           </div>
           <div className="card">
-            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Productos más vendidos</h3>
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Productos mas vendidos</h3>
             {porProducto.map((x) => (
               <div key={x.producto.id} style={{ marginBottom: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
@@ -1683,6 +1894,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
       </div>
     );
   };
+
 
   const renderAnalisis = () => {
     const dias = analisisPeriodo === "all" ? 365 : Number(analisisPeriodo);
@@ -2158,9 +2370,159 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
       const cerrado = state.cierres.some((c) => c.fecha === today);
       return cerrado ? <span className="badge atendida">Caja cerrada</span> : <button className="btn btn-success" onClick={closeCajaFn}><Check  /> Cerrar caja</button>;
     }
+    if (view === "gastos") {
+      return <button className="btn btn-primary" onClick={() => openGastoModal()}><Plus /> Nuevo gasto</button>;
+    }
+    if (view === "barberos") {
+      return <button className="btn btn-primary" onClick={() => openBarberoModal()}><Plus /> Nuevo barbero</button>;
+    }
     return null;
   };
 
+  const renderGastos = () => {
+    const gastosOrdenados = [...state.gastos].sort((a, b) => b.fecha.localeCompare(a.fecha));
+    const totalGastos = state.gastos.reduce((a, g) => a + g.monto, 0);
+    const porCategoria: Record<string, number> = {};
+    state.gastos.forEach((g) => { porCategoria[g.categoria] = (porCategoria[g.categoria] || 0) + g.monto; });
+    return (
+      <div className="view">
+        <div className="grid grid-3" style={{ marginBottom: 20 }}>
+          <div className="card stat-card">
+            <div className="stat-icon danger"><DollarSign /></div>
+            <div className="stat-label">Total gastos</div>
+            <div className="stat-value">{fmtMoney(totalGastos)}</div>
+            <div className="stat-hint">{state.gastos.length} registros</div>
+          </div>
+          {Object.entries(porCategoria).map(([cat, monto]) => (
+            <div className="card stat-card" key={cat}>
+              <div className="stat-icon" style={{ background: "linear-gradient(135deg,#f59e0b,#ef4444)" }}><Receipt /></div>
+              <div className="stat-label" style={{ textTransform: "capitalize" }}>{cat}</div>
+              <div className="stat-value">{fmtMoney(monto)}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Monto</th><th>Barbero</th><th>Producto</th><th></th></tr>
+            </thead>
+            <tbody>
+              {gastosOrdenados.length ? gastosOrdenados.map((g) => (
+                <tr key={g.id}>
+                  <td>{fmtDateShort(g.fecha)}</td>
+                  <td style={{ fontWeight: 600 }}>{g.concepto}</td>
+                  <td><span className="badge confirmada" style={{ textTransform: "capitalize" }}>{g.categoria}</span></td>
+                  <td style={{ fontWeight: 700 }}>{fmtMoney(g.monto)}</td>
+                  <td style={{ color: "var(--text-2)" }}>{g.barberoId ? (byId(state.barberos, g.barberoId)?.nombre || "—") : "—"}</td>
+                  <td style={{ color: "var(--text-2)" }}>{g.productoId ? (byId(state.productos, g.productoId)?.nombre || "—") + (g.cantidad ? " x" + g.cantidad : "") : "—"}</td>
+                  <td>
+                    <button className="btn btn-danger btn-icon btn-sm" title="Eliminar" aria-label="Eliminar" onClick={async () => { if (!confirm("Eliminar este gasto?")) return; try { await deleteGasto(g.id); await reload(true); toast("Gasto eliminado", "info"); } catch (e) { toast(errMsg(e), "error"); } }}><Trash2 /></button>
+                  </td>
+                </tr>
+              )) : (
+                <tr><td colSpan={7}><div className="empty"><h3>Sin gastos</h3><p>Registra tu primer gasto o compra</p></div></td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderLiquidacion = () => {
+    const hoy = todayStr();
+    const periodo = "30";
+    const days: string[] = [];
+    for (let i = Number(periodo) - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      days.push(d.toISOString().split("T")[0]);
+    }
+    const inRange = (fecha: string) => days.includes(fecha.split("T")[0]);
+
+    const liquidar = async (barberoId: string, monto: number) => {
+      if (!confirm("Registrar liquidacion de " + fmtMoney(monto) + "?")) return;
+      try {
+        await createGasto({
+          fecha: hoy,
+          concepto: "Liquidacion - " + (byId(state.barberos, barberoId)?.nombre || ""),
+          categoria: "liquidacion",
+          monto,
+          barberoId,
+          productoId: null,
+          cantidad: 0,
+          notas: "Liquidacion de comisiones periodo " + days[0] + " a " + days[days.length - 1],
+        });
+        await reload(true);
+        toast("Liquidacion registrada", "success");
+      } catch (e) {
+        toast(errMsg(e), "error");
+      }
+    };
+
+    return (
+      <div className="view">
+        <div className="card" style={{ marginBottom: 20, padding: 14 }}>
+          <div style={{ fontSize: 13, color: "var(--text-3)" }}>
+            Liquidacion de los ultimos {periodo} dias. Comision calculada sobre los servicios atendidos por cada barbero.
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {state.barberos.map((b) => {
+            const pagosBarbero = state.pagos.filter((p) => {
+              const c = byId(state.citas, p.citaId);
+              return c?.barberoId === b.id && inRange(c.fecha);
+            });
+            const ventasBarbero = state.ventas.filter((v) => v.barberoId === b.id && inRange(v.fecha));
+            const ingresosServicios = pagosBarbero.reduce((a, p) => a + p.monto, 0);
+            const ingresosProductos = ventasBarbero.reduce((a, v) => a + v.total, 0);
+            const comisionServicios = Math.round(ingresosServicios * (b.comisionPct / 100));
+            const comisionProductos = Math.round(ingresosProductos * (b.comisionPct / 100));
+            const totalGanado = comisionServicios + comisionProductos;
+            const yaLiquidado = state.gastos.filter((g) => g.categoria === "liquidacion" && g.barberoId === b.id && inRange(g.fecha)).reduce((a, g) => a + g.monto, 0);
+            const pendiente = Math.max(0, totalGanado - yaLiquidado);
+            return (
+              <div key={b.id} className="card">
+                <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
+                  <div className="avatar lg" style={{ background: b.color }}>{initials(b.nombre)}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 800, fontSize: 16 }}>{b.nombre}</div>
+                    <div style={{ color: "var(--text-3)", fontSize: 12 }}>Comision: {b.comisionPct}%</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600 }}>PENDIENTE</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: pendiente > 0 ? "var(--warning)" : "var(--success)" }}>{fmtMoney(pendiente)}</div>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
+                  <div style={{ background: "var(--surface-2)", padding: 10, borderRadius: 10 }}>
+                    <div style={{ fontSize: 10, color: "var(--text-3)", fontWeight: 600 }}>SERVICIOS</div>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{fmtMoney(ingresosServicios)}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)" }}>Comision {fmtMoney(comisionServicios)}</div>
+                  </div>
+                  <div style={{ background: "var(--surface-2)", padding: 10, borderRadius: 10 }}>
+                    <div style={{ fontSize: 10, color: "var(--text-3)", fontWeight: 600 }}>PRODUCTOS</div>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{fmtMoney(ingresosProductos)}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)" }}>Comision {fmtMoney(comisionProductos)}</div>
+                  </div>
+                  <div style={{ background: "var(--surface-2)", padding: 10, borderRadius: 10 }}>
+                    <div style={{ fontSize: 10, color: "var(--text-3)", fontWeight: 600 }}>YA LIQUIDADO</div>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{fmtMoney(yaLiquidado)}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)" }}>En el periodo</div>
+                  </div>
+                </div>
+                <button className="btn btn-success" onClick={() => liquidar(b.id, pendiente)} disabled={pendiente <= 0}>
+                  <Check /> Liquidar {fmtMoney(pendiente)}
+                </button>
+              </div>
+            );
+          })}
+          {state.barberos.length === 0 && <div className="empty"><h3>Sin barberos</h3><p>Agrega barberos en la seccion Equipo</p></div>}
+        </div>
+      </div>
+    );
+  };
   const renderContent = () => {
     switch (view) {
       case "dashboard": return renderDashboard();
@@ -2174,6 +2536,8 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
       case "reportes": return renderReportes();
       case "analisis": return renderAnalisis();
       case "config": return renderConfiguracion();
+      case "gastos": return renderGastos();
+      case "liquidacion": return renderLiquidacion();
       default: return null;
     }
   };

@@ -11,6 +11,7 @@ import type {
   Servicio,
   Venta,
   VentaItem,
+  Gasto,
 } from "./types";
 import { initials } from "./utils";
 
@@ -18,7 +19,7 @@ import { initials } from "./utils";
 /* Tipos de fila (snake_case) tal como vienen de Supabase             */
 /* ------------------------------------------------------------------ */
 
-type BarberoRow = { id: string; nombre: string; color: string | null; telefono: string | null; activo: boolean };
+type BarberoRow = { id: string; nombre: string; color: string | null; telefono: string | null; activo: boolean; comision_pct: number | null };
 type ServicioRow = { id: string; nombre: string; precio: number; duracion: number; activo: boolean };
 type ProductoRow = {
   id: string;
@@ -61,6 +62,17 @@ type CierreRow = {
   notas: string | null;
   cerrado_en: string;
 };
+type GastoRow = {
+  id: string;
+  fecha: string;
+  concepto: string;
+  categoria: string;
+  monto: number;
+  barbero_id: string | null;
+  producto_id: string | null;
+  cantidad: number;
+  notas: string | null;
+};
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
@@ -78,6 +90,7 @@ const mapBarbero = (r: BarberoRow): Barbero => ({
   color: r.color ?? "#8b5cf6",
   telefono: r.telefono ?? "",
   activo: r.activo,
+  comisionPct: Number(r.comision_pct ?? 50),
 });
 
 const mapServicio = (r: ServicioRow): Servicio => ({
@@ -151,6 +164,18 @@ const mapCierre = (r: CierreRow): Cierre => ({
   cerradoEn: r.cerrado_en,
 });
 
+const mapGasto = (r: GastoRow): Gasto => ({
+  id: r.id,
+  fecha: r.fecha,
+  concepto: r.concepto,
+  categoria: r.categoria,
+  monto: Number(r.monto),
+  barberoId: r.barbero_id,
+  productoId: r.producto_id,
+  cantidad: Number(r.cantidad),
+  notas: r.notas ?? "",
+});
+
 export function currentUserFromProfile(profile: Profile) {
   return {
     id: profile.id,
@@ -168,7 +193,7 @@ export function currentUserFromProfile(profile: Profile) {
 export async function loadAppState(profile: Profile): Promise<AppState> {
   const sb = getSupabase();
 
-  const [barberos, servicios, productos, clientes, citas, pagos, ventas, cierres] =
+  const [barberos, servicios, productos, clientes, citas, pagos, ventas, cierres, gastos] =
     await Promise.all([
       sb.from("barberos").select("*").order("nombre"),
       sb.from("servicios").select("*").order("nombre"),
@@ -178,7 +203,10 @@ export async function loadAppState(profile: Profile): Promise<AppState> {
       sb.from("pagos").select("*").order("fecha"),
       sb.from("ventas").select("*, venta_items(*)").order("fecha"),
       sb.from("cierres_caja").select("*").order("fecha"),
+      sb.from("gastos").select("*").order("fecha"),
     ]);
+
+  const gastosData = gastos.error ? [] : (gastos.data ?? []);
 
   return {
     currentUser: currentUserFromProfile(profile),
@@ -190,6 +218,7 @@ export async function loadAppState(profile: Profile): Promise<AppState> {
     pagos: (ensure(pagos.data, pagos.error) as PagoRow[]).map(mapPago),
     ventas: (ensure(ventas.data, ventas.error) as VentaRow[]).map(mapVenta),
     cierres: (ensure(cierres.data, cierres.error) as CierreRow[]).map(mapCierre),
+    gastos: (gastosData as GastoRow[]).map(mapGasto),
   };
 }
 
@@ -388,4 +417,73 @@ export async function crearVenta(input: {
   });
   if (error) throw new Error(error.message);
   return data as string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Barberos                                                           */
+/* ------------------------------------------------------------------ */
+
+export async function createBarbero(input: { nombre: string; color: string; telefono: string; comisionPct: number }) {
+  const { error } = await getSupabase().from("barberos").insert({
+    nombre: input.nombre,
+    color: input.color,
+    telefono: input.telefono,
+    comision_pct: input.comisionPct,
+    activo: true,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function updateBarbero(
+  id: string,
+  input: { nombre: string; color: string; telefono: string; comisionPct: number; activo: boolean }
+) {
+  const { error } = await getSupabase()
+    .from("barberos")
+    .update({
+      nombre: input.nombre,
+      color: input.color,
+      telefono: input.telefono,
+      comision_pct: input.comisionPct,
+      activo: input.activo,
+    })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteBarbero(id: string) {
+  const { error } = await getSupabase().from("barberos").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+/* ------------------------------------------------------------------ */
+/* Gastos / Compras                                                   */
+/* ------------------------------------------------------------------ */
+
+export async function createGasto(input: {
+  fecha: string;
+  concepto: string;
+  categoria: string;
+  monto: number;
+  barberoId: string | null;
+  productoId: string | null;
+  cantidad: number;
+  notas: string;
+}) {
+  const { error } = await getSupabase().from("gastos").insert({
+    fecha: input.fecha,
+    concepto: input.concepto,
+    categoria: input.categoria,
+    monto: input.monto,
+    barbero_id: input.barberoId,
+    producto_id: input.productoId,
+    cantidad: input.cantidad,
+    notas: input.notas,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteGasto(id: string) {
+  const { error } = await getSupabase().from("gastos").delete().eq("id", id);
+  if (error) throw new Error(error.message);
 }

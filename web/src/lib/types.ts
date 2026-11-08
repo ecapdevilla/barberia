@@ -1,4 +1,4 @@
-export type Barbero = { id: string; nombre: string; color: string; telefono: string; activo: boolean };
+export type Barbero = { id: string; nombre: string; color: string; telefono: string; activo: boolean; comisionPct: number };
 export type Servicio = { id: string; nombre: string; precio: number; duracion: number; activo: boolean };
 export type Producto = { id: string; nombre: string; precio: number; stock: number; activo: boolean; categoria?: string };
 export type Cliente = { id: string; nombre: string; telefono: string; notas: string };
@@ -7,6 +7,7 @@ export type Pago = { id: string; citaId: string; monto: number; metodo: string; 
 export type VentaItem = { productoId: string; cantidad: number; precioUnitario: number };
 export type Venta = { id: string; fecha: string; items: VentaItem[]; total: number; metodo: string; clienteId: string | null; barberoId: string | null; citaId: string | null };
 export type Cierre = { id: string; fecha: string; totalEfectivo: number; totalDigital: number; totalEsperado: number; diferencia: number; notas: string; cerradoEn: string };
+export type Gasto = { id: string; fecha: string; concepto: string; categoria: string; monto: number; barberoId: string | null; productoId: string | null; cantidad: number; notas: string };
 export type CurrentUser = { id: string; nombre: string; rol: string; avatar?: string; barberoId?: string };
 export type Profile = {
   id: string;
@@ -25,4 +26,5 @@ export type AppState = {
   citas: Cita[];
   pagos: Pago[];
   cierres: Cierre[];
+  gastos: Gasto[];
 };

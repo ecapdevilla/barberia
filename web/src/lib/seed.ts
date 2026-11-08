@@ -5,9 +5,9 @@ export function createSeed(): AppState {
   const SEED: AppState = {
     currentUser: { id: "u1", nombre: "Dueño", rol: "admin", avatar: "D" },
     barberos: [
-      { id: "b1", nombre: "Carlos Ruiz", color: "#8b5cf6", telefono: "300 111 2233", activo: true },
-      { id: "b2", nombre: "Andrés Peña", color: "#06b6d4", telefono: "301 444 5566", activo: true },
-      { id: "b3", nombre: "Diego Mora", color: "#ec4899", telefono: "302 777 8899", activo: true },
+      { id: "b1", nombre: "Carlos Ruiz", color: "#8b5cf6", telefono: "300 111 2233", activo: true, comisionPct: 50 },
+      { id: "b2", nombre: "Andrés Peña", color: "#06b6d4", telefono: "301 444 5566", activo: true, comisionPct: 50 },
+      { id: "b3", nombre: "Diego Mora", color: "#ec4899", telefono: "302 777 8899", activo: true, comisionPct: 50 },
     ],
     servicios: [
       { id: "s1", nombre: "Corte clásico", precio: 25000, duracion: 30, activo: true },
@@ -34,6 +34,7 @@ export function createSeed(): AppState {
     citas: [],
     pagos: [],
     cierres: [],
+    gastos: [],
   };
 
   const today = new Date().toISOString().split("T")[0];
