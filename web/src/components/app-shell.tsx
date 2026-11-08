@@ -2147,9 +2147,15 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
         setSaving(true);
         setMsg(null);
         try {
+          const { data: sessionData } = await getSupabase().auth.getSession();
+          const accessToken = sessionData.session?.access_token;
+          if (!accessToken) throw new Error("Sesión expirada. Vuelve a iniciar sesión.");
           const res = await fetch("/api/admin/create-user", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: "Bearer " + accessToken,
+            },
             body: JSON.stringify({
               email: email.trim(),
               password,
