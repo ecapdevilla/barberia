@@ -8,6 +8,13 @@ export type VentaItem = { productoId: string; cantidad: number; precioUnitario: 
 export type Venta = { id: string; fecha: string; items: VentaItem[]; total: number; metodo: string; clienteId: string | null; barberoId: string | null; citaId: string | null };
 export type Cierre = { id: string; fecha: string; totalEfectivo: number; totalDigital: number; totalEsperado: number; diferencia: number; notas: string; cerradoEn: string };
 export type CurrentUser = { id: string; nombre: string; rol: string; avatar?: string; barberoId?: string };
+export type Profile = {
+  id: string;
+  nombre: string;
+  rol: "admin" | "barbero";
+  barbero_id: string | null;
+  activo: boolean;
+};
 export type AppState = {
   currentUser: CurrentUser;
   barberos: Barbero[];

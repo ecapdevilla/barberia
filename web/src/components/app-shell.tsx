@@ -1,14 +1,34 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import type { AppState } from "@/lib/types";
-import { STORAGE_KEY, START_HOUR, END_HOUR, SLOT_MIN, SLOT_H, uid, fmtMoney, fmtDateLong, fmtDateShort, toMin, toHHMM, initials, byId, todayStr, hasOverlap } from "@/lib/utils";
-import { createSeed } from "@/lib/seed";
+import { useState, useEffect, useCallback } from "react";
+import type { AppState, Profile } from "@/lib/types";
+import { START_HOUR, END_HOUR, SLOT_MIN, SLOT_H, uid, fmtMoney, fmtDateLong, fmtDateShort, toMin, toHHMM, initials, byId, todayStr, hasOverlap } from "@/lib/utils";
+import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import {
+  loadAppState,
+  createCita,
+  updateCita,
+  deleteCita as apiDeleteCita,
+  registrarPago,
+  cerrarCaja,
+  createCliente,
+  updateCliente,
+  deleteCliente as apiDeleteCliente,
+  createServicio,
+  updateServicio,
+  deleteServicio as apiDeleteServicio,
+  createProducto,
+  updateProducto,
+  deleteProducto as apiDeleteProducto,
+  crearVenta,
+} from "@/lib/data";
+import { LoginScreen, LoadingScreen, ConfigScreen, NoProfileScreen } from "./auth-screens";
 import {
   Plus, Pencil, Trash2, X, Check, ChevronLeft, ChevronRight, Search,
   LayoutDashboard, Calendar, Users, Scissors, User, Wallet, BarChart3,
   Menu, CalendarDays, Banknote, Smartphone, ArrowLeftRight, DollarSign,
-  Clock, XCircle, CheckCircle2, Info, AlertTriangle, Package, ShoppingBag
+  Clock, XCircle, CheckCircle2, Info, AlertTriangle, Package, ShoppingBag,
+  LogOut, RefreshCw
 } from "lucide-react";
 
 const VIEW_META: Record<string, { title: string; sub: string }> = {
@@ -25,42 +45,148 @@ const VIEW_META: Record<string, { title: string; sub: string }> = {
 
 type Toast = { id: string; msg: string; type: "success" | "error" | "info" };
 
+function emptyState(profile: Profile): AppState {
+  return {
+    currentUser: {
+      id: profile.id,
+      nombre: profile.nombre,
+      rol: profile.rol,
+      avatar: initials(profile.nombre),
+      barberoId: profile.barbero_id ?? undefined,
+    },
+    barberos: [],
+    servicios: [],
+    productos: [],
+    clientes: [],
+    citas: [],
+    pagos: [],
+    ventas: [],
+    cierres: [],
+  };
+}
+
+const errMsg = (e: unknown) =>
+  e instanceof Error ? e.message : typeof e === "string" ? e : "Error inesperado";
+
 export default function AppShell() {
-  const [state, setState] = useState<AppState>(() => createSeed());
-  const [loaded, setLoaded] = useState(false);
+  const [sessionUser, setSessionUser] = useState<{ id: string; email?: string } | null | undefined>(undefined);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [checkingProfile, setCheckingProfile] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    const sb = getSupabase();
+
+    sb.auth.getSession().then(({ data }) => {
+      if (!alive) return;
+      setSessionUser(
+        data.session
+          ? { id: data.session.user.id, email: data.session.user.email ?? undefined }
+          : null
+      );
+    });
+
+    const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
+      if (!alive) return;
+      setSessionUser(
+        session ? { id: session.user.id, email: session.user.email ?? undefined } : null
+      );
+    });
+
+    return () => {
+      alive = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    if (!sessionUser) {
+      setProfile(null);
+      setCheckingProfile(false);
+      return;
+    }
+
+    setCheckingProfile(true);
+    getSupabase()
+      .from("profiles")
+      .select("id, nombre, rol, barbero_id, activo")
+      .eq("id", sessionUser.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error) {
+          setProfileError(error.message);
+          setProfile(null);
+        } else {
+          const p = data as Profile | null;
+          setProfile(p && p.activo ? p : null);
+          setProfileError(p && !p.activo ? "Tu perfil está inactivo." : null);
+        }
+        setCheckingProfile(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [sessionUser]);
+
+  const signOut = useCallback(async () => {
+    await getSupabase().auth.signOut();
+    setProfile(null);
+    setSessionUser(null);
+  }, []);
+
+  if (!isSupabaseConfigured) return <ConfigScreen />;
+  if (sessionUser === undefined) return <LoadingScreen label="Conectando con Supabase..." />;
+  if (!sessionUser) return <LoginScreen />;
+  if (checkingProfile) return <LoadingScreen label="Cargando perfil..." />;
+  if (!profile) {
+    return (
+      <NoProfileScreen
+        email={sessionUser.email}
+        error={profileError}
+        onSignOut={() => void signOut()}
+      />
+    );
+  }
+
+  return <BarberiaApp profile={profile} onSignOut={signOut} />;
+}
+
+function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () => Promise<void> }) {
+  const [state, setState] = useState<AppState>(() => emptyState(profile));
+  const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [view, setView] = useState("dashboard");
   const [agendaDate, setAgendaDate] = useState(() => todayStr());
   const [modal, setModal] = useState<React.ReactNode | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [searchCliente, setSearchCliente] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const stateRef = useRef(state);
-  useEffect(() => { stateRef.current = state; }, [state]);
 
-  // load from localStorage on mount (+ migrate old state sin productos/ventas)
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const seed = createSeed();
-        const migrated: AppState = {
-          ...seed,
-          ...parsed,
-          productos: parsed.productos ?? seed.productos,
-          ventas: parsed.ventas ?? [],
-        };
-        setState(migrated);
+  const reload = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const next = await loadAppState(profile);
+        setState(next);
+        setLoadError(null);
+        setHasLoaded(true);
+      } catch (e) {
+        setLoadError(errMsg(e));
+      } finally {
+        if (!silent) setLoading(false);
       }
-    } catch {}
-    setLoaded(true);
-  }, []);
+    },
+    [profile]
+  );
 
-  // save on change
   useEffect(() => {
-    if (!loaded) return;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
-  }, [state, loaded]);
+    void reload();
+  }, [reload]);
 
   const toast = useCallback((msg: string, type: Toast["type"] = "success") => {
     const id = uid("t");
@@ -73,15 +199,9 @@ export default function AppShell() {
 
   const today = todayStr();
 
-  const switchRole = () => {
-    const roles = [
-      { rol: "admin", nombre: "Dueño", avatar: "D" },
-      { rol: "barbero", nombre: "Carlos Ruiz", avatar: "CR", barberoId: "b1" },
-    ];
-    const current = state.currentUser.rol;
-    const next = roles.find((r) => r.rol !== current)!;
-    setState((s) => ({ ...s, currentUser: { id: "u1", ...next } }));
-    toast(`Rol cambiado a ${next.rol}`, "info");
+  const handleSignOut = () => {
+    if (!confirm("¿Cerrar sesión?")) return;
+    void onSignOut();
   };
 
   const setViewFn = (v: string) => {
@@ -140,7 +260,7 @@ export default function AppShell() {
         <span>Reportes</span>
       </button>
       <div className="sidebar-footer">
-        <div className="user-chip" onClick={switchRole} title="Cambiar rol">
+        <div className="user-chip" onClick={handleSignOut} title="Cerrar sesión">
           <div className="user-avatar" style={{ background: "linear-gradient(135deg,#06b6d4,#3b82f6)" }}>
             {state.currentUser.avatar || initials(state.currentUser.nombre)}
           </div>
@@ -148,6 +268,7 @@ export default function AppShell() {
             <div className="user-name">{state.currentUser.nombre}</div>
             <div className="user-role">{state.currentUser.rol === "admin" ? "Administrador" : "Barbero"}</div>
           </div>
+          <LogOut style={{ width: 16, height: 16, marginLeft: "auto", color: "var(--text-3)" }} />
         </div>
       </div>
     </aside>
@@ -280,37 +401,47 @@ export default function AppShell() {
         const o = hasOverlap(state.citas, barberoId, fecha, hora, horaFin, editId);
         setOverlap(o);
       };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       useEffect(() => { validate(); }, [barberoId, servicioId, fecha, hora]);
 
-      const save = () => {
+      const save = async () => {
         if (!svc) return;
+        if (!clienteId || !barberoId || !servicioId) {
+          toast("Faltan datos de la cita", "error");
+          return;
+        }
         const startMin = toMin(hora);
         const horaFin = toHHMM(startMin + svc.duracion);
         if (hasOverlap(state.citas, barberoId, fecha, hora, horaFin, editId)) {
           toast("Este horario ya está ocupado", "error");
           return;
         }
-        if (editId) {
-          setState((s) => ({
-            ...s,
-            citas: s.citas.map((c) => c.id === editId ? { ...c, clienteId, barberoId, servicioId, fecha, hora, horaFin, estado } : c),
-          }));
-          toast("Cita actualizada", "success");
-        } else {
-          setState((s) => ({
-            ...s,
-            citas: [...s.citas, { id: uid("ap"), clienteId, barberoId, servicioId, fecha, hora, horaFin, estado }],
-          }));
-          toast("Cita creada", "success");
+        try {
+          const input = { clienteId, barberoId, servicioId, fecha, hora, horaFin, estado };
+          if (editId) {
+            await updateCita(editId, input);
+            toast("Cita actualizada", "success");
+          } else {
+            await createCita(input);
+            toast("Cita creada", "success");
+          }
+          await reload(true);
+          closeModal();
+        } catch (e) {
+          toast(errMsg(e), "error");
         }
-        closeModal();
       };
 
-      const del = () => {
-        if (!confirm("¿Eliminar esta cita?")) return;
-        setState((s) => ({ ...s, citas: s.citas.filter((c) => c.id !== editId) }));
-        closeModal();
-        toast("Cita eliminada", "info");
+      const del = async () => {
+        if (!editId || !confirm("¿Eliminar esta cita?")) return;
+        try {
+          await apiDeleteCita(editId);
+          await reload(true);
+          closeModal();
+          toast("Cita eliminada", "info");
+        } catch (e) {
+          toast(errMsg(e), "error");
+        }
       };
 
       return (
@@ -424,11 +555,16 @@ export default function AppShell() {
     openModal(<Modal />);
   };
 
-  const deleteCita = (id: string) => {
+  const deleteCita = async (id: string) => {
     if (!confirm("¿Eliminar esta cita?")) return;
-    setState((s) => ({ ...s, citas: s.citas.filter((c) => c.id !== id) }));
-    closeModal();
-    toast("Cita eliminada", "info");
+    try {
+      await apiDeleteCita(id);
+      await reload(true);
+      closeModal();
+      toast("Cita eliminada", "info");
+    } catch (e) {
+      toast(errMsg(e), "error");
+    }
   };
 
   const openPagoModal = (citaId: string) => {
@@ -439,15 +575,16 @@ export default function AppShell() {
     const Modal = () => {
       const [monto, setMonto] = useState(svc.precio);
       const [metodo, setMetodo] = useState("efectivo");
-      const save = () => {
+      const save = async () => {
         if (!monto || monto <= 0) { toast("Monto inválido", "error"); return; }
-        setState((s) => ({
-          ...s,
-          pagos: [...s.pagos, { id: uid("p"), citaId, monto, metodo, fecha: new Date().toISOString() }],
-          citas: s.citas.map((x) => x.id === citaId ? { ...x, estado: "atendida" } : x),
-        }));
-        closeModal();
-        toast("Pago registrado: " + fmtMoney(monto), "success");
+        try {
+          await registrarPago({ citaId, monto, metodo });
+          await reload(true);
+          closeModal();
+          toast("Pago registrado: " + fmtMoney(monto), "success");
+        } catch (e) {
+          toast(errMsg(e), "error");
+        }
       };
       return (
         <>
@@ -493,14 +630,23 @@ export default function AppShell() {
     const Modal = () => {
       const [contado, setContado] = useState(totalEfec);
       const [notas, setNotas] = useState("");
-      const confirm = () => {
+      const confirm = async () => {
         const diff = contado - totalEfec;
-        setState((s) => ({
-          ...s,
-          cierres: [...s.cierres, { id: uid("ci"), fecha: today, totalEfectivo: contado, totalDigital: totalDig, totalEsperado: totalEfec + totalDig, diferencia: diff, notas, cerradoEn: new Date().toISOString() }],
-        }));
-        closeModal();
-        toast(diff === 0 ? "Caja cuadrada ✓" : `Diferencia: ${fmtMoney(diff)}`, diff === 0 ? "success" : "info");
+        try {
+          await cerrarCaja({
+            fecha: today,
+            totalEfectivo: contado,
+            totalDigital: totalDig,
+            totalEsperado: totalEfec + totalDig,
+            diferencia: diff,
+            notas,
+          });
+          await reload(true);
+          closeModal();
+          toast(diff === 0 ? "Caja cuadrada ✓" : `Diferencia: ${fmtMoney(diff)}`, diff === 0 ? "success" : "info");
+        } catch (e) {
+          toast(errMsg(e), "error");
+        }
       };
       return (
         <>
@@ -548,20 +694,25 @@ export default function AppShell() {
       const [nombre, setNombre] = useState(c?.nombre || "");
       const [telefono, setTelefono] = useState(c?.telefono || "");
       const [notas, setNotas] = useState(c?.notas || "");
-      const save = () => {
+      const save = async () => {
         const n = nombre.trim();
         const t = telefono.trim();
         if (!n || !t) { toast("Nombre y teléfono obligatorios", "error"); return; }
         const dup = state.clientes.find((x) => x.telefono === t && x.id !== id);
         if (dup) { toast("Teléfono ya registrado", "error"); return; }
-        if (id) {
-          setState((s) => ({ ...s, clientes: s.clientes.map((x) => x.id === id ? { ...x, nombre: n, telefono: t, notas: notas.trim() } : x) }));
-          toast("Cliente actualizado", "success");
-        } else {
-          setState((s) => ({ ...s, clientes: [...s.clientes, { id: uid("c"), nombre: n, telefono: t, notas: notas.trim() }] }));
-          toast("Cliente creado", "success");
+        try {
+          if (id) {
+            await updateCliente(id, { nombre: n, telefono: t, notas: notas.trim() });
+            toast("Cliente actualizado", "success");
+          } else {
+            await createCliente({ nombre: n, telefono: t, notas: notas.trim() });
+            toast("Cliente creado", "success");
+          }
+          await reload(true);
+          closeModal();
+        } catch (e) {
+          toast(errMsg(e), "error");
         }
-        closeModal();
       };
       return (
         <>
@@ -596,10 +747,15 @@ export default function AppShell() {
     openModal(<Modal />);
   };
 
-  const deleteCliente = (id: string) => {
+  const deleteCliente = async (id: string) => {
     if (!confirm("¿Eliminar este cliente? También se eliminarán sus citas asociadas.")) return;
-    setState((s) => ({ ...s, clientes: s.clientes.filter((c) => c.id !== id), citas: s.citas.filter((c) => c.clienteId !== id) }));
-    toast("Cliente eliminado", "info");
+    try {
+      await apiDeleteCliente(id);
+      await reload(true);
+      toast("Cliente eliminado", "info");
+    } catch (e) {
+      toast(errMsg(e), "error");
+    }
   };
 
   // ---------- SERVICIOS ----------
@@ -609,17 +765,22 @@ export default function AppShell() {
       const [nombre, setNombre] = useState(s?.nombre || "");
       const [precio, setPrecio] = useState(s?.precio || 25000);
       const [duracion, setDuracion] = useState(s?.duracion || 30);
-      const save = () => {
+      const save = async () => {
         const n = nombre.trim();
         if (!n || !precio || !duracion) { toast("Completa todos los campos", "error"); return; }
-        if (id) {
-          setState((st) => ({ ...st, servicios: st.servicios.map((x) => x.id === id ? { ...x, nombre: n, precio, duracion } : x) }));
-          toast("Servicio actualizado", "success");
-        } else {
-          setState((st) => ({ ...st, servicios: [...st.servicios, { id: uid("s"), nombre: n, precio, duracion, activo: true }] }));
-          toast("Servicio creado", "success");
+        try {
+          if (id) {
+            await updateServicio(id, { nombre: n, precio, duracion });
+            toast("Servicio actualizado", "success");
+          } else {
+            await createServicio({ nombre: n, precio, duracion });
+            toast("Servicio creado", "success");
+          }
+          await reload(true);
+          closeModal();
+        } catch (e) {
+          toast(errMsg(e), "error");
         }
-        closeModal();
       };
       return (
         <>
@@ -664,17 +825,23 @@ export default function AppShell() {
       const [precio, setPrecio] = useState(p?.precio || 20000);
       const [stock, setStock] = useState(p?.stock || 10);
       const [categoria, setCategoria] = useState(p?.categoria || "");
-      const save = () => {
+      const save = async () => {
         const n = nombre.trim();
         if (!n || precio <= 0 || stock < 0) { toast("Completa nombre, precio y stock válidos", "error"); return; }
-        if (id) {
-          setState((st) => ({ ...st, productos: st.productos.map((x) => x.id === id ? { ...x, nombre: n, precio, stock, categoria: categoria.trim() || undefined } : x) }));
-          toast("Producto actualizado", "success");
-        } else {
-          setState((st) => ({ ...st, productos: [...st.productos, { id: uid("p"), nombre: n, precio, stock, categoria: categoria.trim() || undefined, activo: true }] }));
-          toast("Producto creado", "success");
+        const cat = categoria.trim() || undefined;
+        try {
+          if (id) {
+            await updateProducto(id, { nombre: n, precio, stock, categoria: cat });
+            toast("Producto actualizado", "success");
+          } else {
+            await createProducto({ nombre: n, precio, stock, categoria: cat });
+            toast("Producto creado", "success");
+          }
+          await reload(true);
+          closeModal();
+        } catch (e) {
+          toast(errMsg(e), "error");
         }
-        closeModal();
       };
       return (
         <>
@@ -715,10 +882,15 @@ export default function AppShell() {
     openModal(<Modal />);
   };
 
-  const deleteProducto = (id: string) => {
+  const deleteProducto = async (id: string) => {
     if (!confirm("¿Eliminar este producto?")) return;
-    setState((s) => ({ ...s, productos: s.productos.filter((x) => x.id !== id) }));
-    toast("Producto eliminado", "info");
+    try {
+      await apiDeleteProducto(id);
+      await reload(true);
+      toast("Producto eliminado", "info");
+    } catch (e) {
+      toast(errMsg(e), "error");
+    }
   };
 
   // ---------- VENTAS (POS) ----------
@@ -743,7 +915,7 @@ export default function AppShell() {
         if (next === 0) delete copy[pid]; else copy[pid] = next;
         return copy;
       });
-      const save = () => {
+      const save = async () => {
         const items = Object.entries(cart).map(([productoId, cantidad]) => {
           const prod = byId(state.productos, productoId)!;
           return { productoId, cantidad, precioUnitario: prod.precio };
@@ -752,16 +924,20 @@ export default function AppShell() {
         if (items.some((i) => { const prod = byId(state.productos, i.productoId)!; return i.cantidad > prod.stock; })) {
           toast("Stock insuficiente para un producto", "error"); return;
         }
-        setState((s) => ({
-          ...s,
-          productos: s.productos.map((prod) => {
-            const it = items.find((i) => i.productoId === prod.id);
-            return it ? { ...prod, stock: Math.max(0, prod.stock - it.cantidad) } : prod;
-          }),
-          ventas: [...s.ventas, { id: uid("v"), fecha: new Date().toISOString(), items, total, metodo, clienteId: clienteId || null, barberoId: barberoId || null, citaId: presetCitaId }],
-        }));
-        closeModal();
-        toast("Venta registrada: " + fmtMoney(total), "success");
+        try {
+          await crearVenta({
+            items: items.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad })),
+            metodo,
+            clienteId: clienteId || null,
+            barberoId: barberoId || null,
+            citaId: presetCitaId,
+          });
+          await reload(true);
+          closeModal();
+          toast("Venta registrada: " + fmtMoney(total), "success");
+        } catch (e) {
+          toast(errMsg(e), "error");
+        }
       };
       return (
         <>
@@ -837,10 +1013,15 @@ export default function AppShell() {
     openModal(<Modal />);
   };
 
-  const deleteServicio = (id: string) => {
+  const deleteServicio = async (id: string) => {
     if (!confirm("¿Eliminar este servicio?")) return;
-    setState((s) => ({ ...s, servicios: s.servicios.filter((x) => x.id !== id) }));
-    toast("Servicio eliminado", "info");
+    try {
+      await apiDeleteServicio(id);
+      await reload(true);
+      toast("Servicio eliminado", "info");
+    } catch (e) {
+      toast(errMsg(e), "error");
+    }
   };
 
   // ---------- AGENDA VIEW ----------
@@ -1403,7 +1584,44 @@ export default function AppShell() {
           <div className="topbar-actions">{topbarActions()}</div>
         </header>
         <div className="content">
-          {renderContent()}
+          {loading && !hasLoaded ? (
+            <div className="screen-center" style={{ minHeight: 200 }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+                <div className="spinner" />
+                <div style={{ fontSize: 13, color: "var(--text-3)", fontWeight: 600 }}>Cargando datos...</div>
+              </div>
+            </div>
+          ) : loadError && !hasLoaded ? (
+            <div className="screen-center" style={{ minHeight: 200 }}>
+              <div className="auth-card" style={{ maxWidth: 460 }}>
+                <div className="auth-icon" style={{ background: "linear-gradient(135deg,#f59e0b,#ef4444)" }}>
+                  <AlertTriangle />
+                </div>
+                <div className="auth-title">No se pudieron cargar los datos</div>
+                <div className="auth-sub" style={{ marginTop: 6 }}>{loadError}</div>
+                <button
+                  className="btn btn-primary"
+                  style={{ marginTop: 18, width: "100%" }}
+                  onClick={() => void reload()}
+                >
+                  <RefreshCw /> Reintentar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {loadError && (
+                <div className="sync-bar">
+                  <AlertTriangle />
+                  <span>Error al sincronizar: {loadError}</span>
+                  <button className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }} onClick={() => void reload(true)}>
+                    <RefreshCw /> Reintentar
+                  </button>
+                </div>
+              )}
+              {renderContent()}
+            </>
+          )}
         </div>
       </main>
 
