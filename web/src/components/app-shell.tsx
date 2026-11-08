@@ -28,7 +28,7 @@ import {
   LayoutDashboard, Calendar, Users, Scissors, User, Wallet, BarChart3,
   Menu, CalendarDays, Banknote, Smartphone, ArrowLeftRight, DollarSign,
   Clock, XCircle, CheckCircle2, Info, AlertTriangle, Package, ShoppingBag,
-  LogOut, RefreshCw, TrendingUp
+  LogOut, RefreshCw, TrendingUp, Settings
 } from "lucide-react";
 
 const VIEW_META: Record<string, { title: string; sub: string }> = {
@@ -42,6 +42,7 @@ const VIEW_META: Record<string, { title: string; sub: string }> = {
   caja: { title: "Caja", sub: "Cobros y cierre del día" },
   reportes: { title: "Reportes", sub: "Métricas del negocio" },
   analisis: { title: "Análisis", sub: "Análisis avanzado de datos" },
+  config: { title: "Configuración", sub: "Usuarios, respaldo y ajustes" },
 };
 
 type Toast = { id: string; msg: string; type: "success" | "error" | "info" };
@@ -264,6 +265,10 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
       <button className={"nav-item" + (view === "analisis" ? " active" : "")} onClick={() => setViewFn("analisis")}>
         <TrendingUp  />
         <span>Análisis</span>
+      </button>
+      <button className={"nav-item" + (view === "config" ? " active" : "")} onClick={() => setViewFn("config")}>
+        <Settings  />
+        <span>Configuración</span>
       </button>
       <div className="sidebar-footer">
         <div className="user-chip" onClick={handleSignOut} title="Cerrar sesión">
@@ -1788,6 +1793,196 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
       </div>
     );
   };
+  const openCreateUserModal = () => {
+    const Modal = () => {
+      const [email, setEmail] = useState("");
+      const [password, setPassword] = useState("");
+      const [nombre, setNombre] = useState("");
+      const [rol, setRol] = useState("barbero");
+      const [barberoId, setBarberoId] = useState("");
+      const [saving, setSaving] = useState(false);
+      const [msg, setMsg] = useState<string | null>(null);
+      const save = async () => {
+        if (!email.trim() || password.length < 6) {
+          setMsg("Email y contraseña (mín. 6) obligatorios.");
+          return;
+        }
+        setSaving(true);
+        setMsg(null);
+        try {
+          const res = await fetch("/api/admin/create-user", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: email.trim(),
+              password,
+              nombre: nombre.trim(),
+              rol,
+              barbero_id: barberoId || null,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || "Error al crear usuario.");
+          setMsg("Usuario creado: " + data.email + " (" + data.rol + ").");
+          setEmail(""); setPassword(""); setNombre(""); setBarberoId("");
+        } catch (e) {
+          setMsg(errMsg(e));
+        } finally {
+          setSaving(false);
+        }
+      };
+      return (
+        <>
+          <div className="modal-header">
+            <div>
+              <div className="modal-title">Crear usuario</div>
+              <div className="modal-sub">Crea un usuario Auth + perfil de barbería (requiere service_role en el servidor)</div>
+            </div>
+            <button className="modal-close" onClick={closeModal}><X /></button>
+          </div>
+          <div className="modal-body">
+            <div className="field">
+              <label>Correo</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="usuario@correo.com" />
+            </div>
+            <div className="field">
+              <label>Contraseña (mín. 6)</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••" />
+            </div>
+            <div className="field">
+              <label>Nombre (opcional)</label>
+              <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Juan Pérez" />
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Rol</label>
+                <select value={rol} onChange={(e) => setRol(e.target.value)}>
+                  <option value="barbero">Barbero</option>
+                  <option value="admin">Administrador</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>Vincular a barbero (opcional)</label>
+                <select value={barberoId} onChange={(e) => setBarberoId(e.target.value)}>
+                  <option value="">Sin vincular</option>
+                  {state.barberos.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+                </select>
+              </div>
+            </div>
+            {msg && (
+              <div className={msg.startsWith("Usuario creado") ? "auth-user" : "auth-error"} style={{ marginTop: 10 }}>
+                {msg}
+              </div>
+            )}
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-ghost" onClick={closeModal}>Cerrar</button>
+            <button className="btn btn-primary" onClick={save} disabled={saving}>
+              {saving ? "Creando..." : "Crear usuario"}
+            </button>
+          </div>
+        </>
+      );
+    };
+    openModal(<Modal />);
+  };
+
+  const exportarRespaldo = () => {
+    const data = {
+      exported_at: new Date().toISOString(),
+      barberos: state.barberos,
+      servicios: state.servicios,
+      productos: state.productos,
+      clientes: state.clientes,
+      citas: state.citas,
+      pagos: state.pagos,
+      ventas: state.ventas,
+      cierres: state.cierres,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "barberia-respaldo-" + new Date().toISOString().slice(0, 10) + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast("Respaldo descargado", "success");
+  };
+
+  const exportarCSV = (tipo: "ventas" | "pagos" | "citas") => {
+    const rows: string[] = [];
+    if (tipo === "ventas") {
+      rows.push("id,fecha,total,metodo,cliente_id,barbero_id");
+      state.ventas.forEach((v) => rows.push([v.id, v.fecha, v.total, v.metodo, v.clienteId || "", v.barberoId || ""].join(",")));
+    } else if (tipo === "pagos") {
+      rows.push("id,cita_id,monto,metodo,fecha");
+      state.pagos.forEach((p) => rows.push([p.id, p.citaId, p.monto, p.metodo, p.fecha].join(",")));
+    } else {
+      rows.push("id,cliente_id,barbero_id,servicio_id,fecha,hora,hora_fin,estado");
+      state.citas.forEach((c) => rows.push([c.id, c.clienteId || "", c.barberoId, c.servicioId, c.fecha, c.hora, c.horaFin, c.estado].join(",")));
+    }
+    const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "barberia-" + tipo + "-" + new Date().toISOString().slice(0, 10) + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast("CSV descargado", "success");
+  };
+
+  const renderConfiguracion = () => {
+    return (
+      <div className="view">
+        <div className="grid grid-2" style={{ marginBottom: 20 }}>
+          <div className="card">
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Crear usuario</h3>
+            <p style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 14 }}>
+              Crea un usuario en Supabase Auth y le asigna perfil de barbería. Requiere
+              <code style={{ margin: "0 4px" }}>SUPABASE_SERVICE_ROLE_KEY</code> en el servidor (Vercel).
+            </p>
+            <button className="btn btn-primary" onClick={openCreateUserModal}><Plus /> Nuevo usuario</button>
+          </div>
+          <div className="card">
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Respaldo de datos</h3>
+            <p style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 14 }}>
+              Descarga un JSON con todos los datos actuales (barberos, servicios, productos, clientes, citas, pagos, ventas, cierres).
+            </p>
+            <button className="btn btn-success" onClick={exportarRespaldo}><Package /> Descargar respaldo (JSON)</button>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Exportar CSV</h3>
+          <p style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 14 }}>
+            Descarga los datos en formato CSV para abrir en Excel.
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => exportarCSV("ventas")}>Ventas</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => exportarCSV("pagos")}>Pagos</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => exportarCSV("citas")}>Citas</button>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Información del sistema</h3>
+          <div style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.8 }}>
+            <div><strong>Schema:</strong> barberia (proyecto Supabase compartido)</div>
+            <div><strong>Usuario actual:</strong> {state.currentUser.nombre} ({state.currentUser.rol})</div>
+            <div><strong>Barberos:</strong> {state.barberos.length} · <strong>Servicios:</strong> {state.servicios.length} · <strong>Productos:</strong> {state.productos.length}</div>
+            <div><strong>Clientes:</strong> {state.clientes.length} · <strong>Citas:</strong> {state.citas.length} · <strong>Ventas:</strong> {state.ventas.length}</div>
+            <div style={{ marginTop: 8, color: "var(--text-3)", fontSize: 12 }}>
+              Para respaldo completo de la BD (SQL dump), usa Supabase Dashboard → Database → Backups, o pg_dump con la connection string.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
   const topbarActions = () => {
     if (view === "dashboard") {
       return (
@@ -1853,6 +2048,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
       case "caja": return renderCaja();
       case "reportes": return renderReportes();
       case "analisis": return renderAnalisis();
+      case "config": return renderConfiguracion();
       default: return null;
     }
   };
