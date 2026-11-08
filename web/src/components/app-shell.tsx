@@ -27,7 +27,7 @@ import {
   createGasto,
   deleteGasto,
 } from "@/lib/data";
-import { LoginScreen, LoadingScreen, ConfigScreen, NoProfileScreen } from "./auth-screens";
+import { LoginScreen, LoadingScreen, ConfigScreen, NoProfileScreen, CreateOrgScreen } from "./auth-screens";
 import {
   Plus, Pencil, Trash2, X, Check, ChevronLeft, ChevronRight, Search,
   LayoutDashboard, Calendar, Users, Scissors, User, Wallet, BarChart3,
@@ -62,7 +62,9 @@ function emptyState(profile: Profile): AppState {
       rol: profile.rol,
       avatar: initials(profile.nombre),
       barberoId: profile.barbero_id ?? undefined,
+      organizacionId: profile.organizacion_id ?? undefined,
     },
+    organizacion: null,
     barberos: [],
     servicios: [],
     productos: [],
@@ -152,11 +154,20 @@ export default function AppShell() {
   if (sessionUser === undefined) return <LoadingScreen label="Conectando con Supabase..." />;
   if (!sessionUser) return <LoginScreen />;
   if (checkingProfile) return <LoadingScreen label="Cargando perfil..." />;
-  if (!profile) {
+  if (!profile && profileError) {
     return (
       <NoProfileScreen
         email={sessionUser.email}
         error={profileError}
+        onSignOut={() => void signOut()}
+      />
+    );
+  }
+
+  if (!profile || !profile.organizacion_id) {
+    return (
+      <CreateOrgScreen
+        onCreated={() => { window.location.reload(); }}
         onSignOut={() => void signOut()}
       />
     );
@@ -233,7 +244,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
       <div className="brand">
         <div className="brand-logo">B</div>
         <div className="brand-text">
-          <div className="brand-title">Barbería El Corte</div>
+          <div className="brand-title">{state.organizacion?.nombre || "Barbería El Corte"}</div>
           <div className="brand-sub">Sistema de gestión</div>
         </div>
       </div>
@@ -2561,7 +2572,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
             </button>
             <div>
               <div className="topbar-title">{m.title}</div>
-              <div className="topbar-sub">{view === "agenda" ? fmtDateLong(agendaDate) : m.sub}</div>
+              <div className="topbar-sub">{view === "agenda" ? fmtDateLong(agendaDate) : m.sub}{state.organizacion ? " · " + state.organizacion.nombre : ""}</div>
             </div>
           </div>
           <div className="topbar-actions">{topbarActions()}</div>

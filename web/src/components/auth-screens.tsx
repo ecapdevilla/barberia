@@ -155,6 +155,93 @@ export function LoginScreen() {
   );
 }
 
+export function CreateOrgScreen({
+  onCreated,
+  onSignOut,
+}: {
+  onCreated: () => void;
+  onSignOut: () => void;
+}) {
+  const [nombre, setNombre] = useState("");
+  const [slug, setSlug] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const n = nombre.trim();
+    const s = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+    if (!n || !s) {
+      setError("Nombre y slug son obligatorios.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const { crearOrganizacion } = await import("@/lib/data");
+      await crearOrganizacion(n, s);
+      onCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo crear la barbería.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="screen-center">
+      <form className="auth-card" onSubmit={submit}>
+        <div className="auth-icon">
+          <Scissors />
+        </div>
+        <div className="auth-title">Crea tu barbería</div>
+        <div className="auth-sub" style={{ marginTop: 6 }}>
+          Es tu primera vez. Crea tu organización para empezar a gestionar tu barbería.
+        </div>
+
+        {error && (
+          <div className="auth-error" role="alert">
+            <AlertTriangle />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="auth-form">
+          <div className="field">
+            <label htmlFor="orgnombre">Nombre de la barbería</label>
+            <input
+              id="orgnombre"
+              type="text"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              placeholder="Ej: Barbería El Corte"
+              disabled={loading}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="orgslug">Slug (identificador único)</label>
+            <input
+              id="orgslug"
+              type="text"
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              placeholder="ej: el-corte"
+              disabled={loading}
+            />
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={loading} style={{ width: "100%" }}>
+            {loading ? "Creando..." : "Crear barbería"}
+          </button>
+        </div>
+
+        <button className="btn btn-ghost" onClick={onSignOut} style={{ width: "100%", marginTop: 12 }}>
+          Cerrar sesión
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export function NoProfileScreen({
   email,
   error,

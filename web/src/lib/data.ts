@@ -19,7 +19,7 @@ import { initials } from "./utils";
 /* Tipos de fila (snake_case) tal como vienen de Supabase             */
 /* ------------------------------------------------------------------ */
 
-type BarberoRow = { id: string; nombre: string; color: string | null; telefono: string | null; activo: boolean; comision_pct: number | null };
+type BarberoRow = { id: string; nombre: string; color: string | null; telefono: string | null; activo: boolean; comision_pct: number | null; organizacion_id: string | null };
 type ServicioRow = { id: string; nombre: string; precio: number; duracion: number; activo: boolean };
 type ProductoRow = {
   id: string;
@@ -91,6 +91,7 @@ const mapBarbero = (r: BarberoRow): Barbero => ({
   telefono: r.telefono ?? "",
   activo: r.activo,
   comisionPct: Number(r.comision_pct ?? 50),
+  organizacionId: r.organizacion_id ?? undefined,
 });
 
 const mapServicio = (r: ServicioRow): Servicio => ({
@@ -183,6 +184,7 @@ export function currentUserFromProfile(profile: Profile) {
     rol: profile.rol,
     avatar: initials(profile.nombre),
     barberoId: profile.barbero_id ?? undefined,
+    organizacionId: profile.organizacion_id ?? undefined,
   };
 }
 
@@ -193,8 +195,11 @@ export function currentUserFromProfile(profile: Profile) {
 export async function loadAppState(profile: Profile): Promise<AppState> {
   const sb = getSupabase();
 
-  const [barberos, servicios, productos, clientes, citas, pagos, ventas, cierres, gastos] =
+  const orgId = profile.organizacion_id;
+
+  const [org, barberos, servicios, productos, clientes, citas, pagos, ventas, cierres, gastos] =
     await Promise.all([
+      orgId ? sb.from("organizaciones").select("*").eq("id", orgId).maybeSingle() : Promise.resolve({ data: null, error: null }),
       sb.from("barberos").select("*").order("nombre"),
       sb.from("servicios").select("*").order("nombre"),
       sb.from("productos").select("*").order("nombre"),
@@ -208,8 +213,11 @@ export async function loadAppState(profile: Profile): Promise<AppState> {
 
   const gastosData = gastos.error ? [] : (gastos.data ?? []);
 
+  const orgData = (org as { data: { id: string; nombre: string; slug: string } | null }).data;
+
   return {
     currentUser: currentUserFromProfile(profile),
+    organizacion: orgData ? { id: orgData.id, nombre: orgData.nombre, slug: orgData.slug } : null,
     barberos: (ensure(barberos.data, barberos.error) as BarberoRow[]).map(mapBarbero),
     servicios: (ensure(servicios.data, servicios.error) as ServicioRow[]).map(mapServicio),
     productos: (ensure(productos.data, productos.error) as ProductoRow[]).map(mapProducto),
@@ -459,6 +467,15 @@ export async function deleteBarbero(id: string) {
 /* ------------------------------------------------------------------ */
 /* Gastos / Compras                                                   */
 /* ------------------------------------------------------------------ */
+
+export async function crearOrganizacion(nombre: string, slug: string): Promise<string> {
+  const { data, error } = await getSupabase().rpc("crear_organizacion", {
+    p_nombre: nombre,
+    p_slug: slug,
+  });
+  if (error) throw new Error(error.message);
+  return data as string;
+}
 
 export async function createGasto(input: {
   fecha: string;

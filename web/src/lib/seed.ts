@@ -4,6 +4,7 @@ import { uid } from "./utils";
 export function createSeed(): AppState {
   const SEED: AppState = {
     currentUser: { id: "u1", nombre: "Dueño", rol: "admin", avatar: "D" },
+    organizacion: null,
     barberos: [
       { id: "b1", nombre: "Carlos Ruiz", color: "#8b5cf6", telefono: "300 111 2233", activo: true, comisionPct: 50 },
       { id: "b2", nombre: "Andrés Peña", color: "#06b6d4", telefono: "301 444 5566", activo: true, comisionPct: 50 },
