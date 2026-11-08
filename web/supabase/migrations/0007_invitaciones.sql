@@ -15,7 +15,18 @@ alter table barberia.profiles
 -- update barberia.profiles set master = true where id = (select id from auth.users where email = 'TU_EMAIL@EJEMPLO.COM');
 
 -- ---------------------------------------------------------------------------
--- 2) Tabla de invitaciones
+-- 2) Helper is_master() — ANTES de las policies
+-- ---------------------------------------------------------------------------
+create or replace function barberia.is_master()
+returns boolean
+language sql stable security definer
+set search_path = barberia, pg_temp
+as $$
+  select coalesce((select master from barberia.profiles where id = auth.uid() and activo), false)
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 3) Tabla de invitaciones
 -- ---------------------------------------------------------------------------
 create table if not exists barberia.invitaciones (
   id uuid primary key default gen_random_uuid(),
@@ -63,17 +74,6 @@ drop policy if exists invitaciones_delete on barberia.invitaciones;
 create policy invitaciones_delete on barberia.invitaciones
   for delete to authenticated
   using (barberia.is_master());
-
--- ---------------------------------------------------------------------------
--- 3) Helper is_master()
--- ---------------------------------------------------------------------------
-create or replace function barberia.is_master()
-returns boolean
-language sql stable security definer
-set search_path = barberia, pg_temp
-as $$
-  select coalesce((select master from barberia.profiles where id = auth.uid() and activo), false)
-$$;
 
 -- ---------------------------------------------------------------------------
 -- 4) RPC generar_invitacion (solo master)
