@@ -1,5 +1,15 @@
 # Migración a Supabase — guía para tu primo
 
+> **Actualización:** este proyecto NO crea un Supabase nuevo. Usa el proyecto
+> existente (droguería) con un **schema aislado `barberia`**. Las migraciones ya
+> están en `web/supabase/migrations/`:
+> - `0001_init_barberia_schema.sql` → schema + tablas + seed + trigger de stock
+> - `0002_rls_policies.sql` → perfiles, Auth y políticas RLS de producción
+>
+> Lee también `docs/supabase-barberia.md` (aislamiento, Auth compartida y cliente JS).
+> La sección "Crear proyecto Supabase" de abajo queda solo como referencia si
+> algún día se decide usar un proyecto dedicado.
+
 ## 0. Pre-requisitos
 - Node 20 (`node -v`), `npm i -g supabase` (Supabase CLI), Git, cuenta en supabase.com y en Vercel.
 - Clonar el repo y correr `npm install && npm run dev` para ver la UI actual (datos en `localStorage`).

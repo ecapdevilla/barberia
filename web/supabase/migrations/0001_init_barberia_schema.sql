@@ -93,8 +93,14 @@ create table if not exists barberia.cierres_caja (
 create index if not exists citas_barbero_fecha_idx on barberia.citas (barbero_id, fecha);
 
 -- Decrementar stock al vender (con control de stock negativo)
+-- SECURITY DEFINER: el trigger debe poder actualizar productos aunque el
+-- usuario que inserta venta_items no tenga permiso directo sobre productos.
 create or replace function barberia.decrement_stock_on_sale()
-returns trigger as $$
+returns trigger
+language plpgsql
+security definer
+set search_path = barberia, pg_temp
+as $$
 begin
   update barberia.productos
   set stock = stock - new.cantidad
@@ -104,7 +110,7 @@ begin
   end if;
   return new;
 end;
-$$ language plpgsql;
+$$;
 
 drop trigger if exists venta_item_decrement_stock on barberia.venta_items;
 

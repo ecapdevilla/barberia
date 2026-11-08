@@ -10,7 +10,8 @@ web/
 │   ├── app/              # layout.tsx, page.tsx, globals.css
 │   ├── components/       # app-shell.tsx (toda la UI)
 │   └── lib/              # types.ts, utils.ts, seed.ts
-├── docs/                 # arquitectura.md, modelo-datos.md, migracion-supabase.md
+├── docs/                 # arquitectura.md, modelo-datos.md, migracion-supabase.md, supabase-barberia.md
+├── supabase/migrations/  # 0001 schema barberia + 0002 RLS/Auth
 ├── .env.local.example
 ├── next.config.mjs
 └── tailwind.config.ts
