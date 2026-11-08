@@ -106,6 +106,8 @@ begin
 end;
 $$ language plpgsql;
 
+drop trigger if exists venta_item_decrement_stock on barberia.venta_items;
+
 create trigger venta_item_decrement_stock
   after insert on barberia.venta_items
   for each row execute function barberia.decrement_stock_on_sale();
@@ -126,32 +128,33 @@ grant all on all tables in schema barberia to anon, authenticated, service_role;
 grant all on all sequences in schema barberia to anon, authenticated, service_role;
 
 -- Seed inicial (copia de src/lib/seed.ts)
+-- IDs fijos en formato UUID para poder re-ejecutar sin duplicar.
 insert into barberia.barberos (id, nombre, color, telefono, activo) values
-  ('b1','Carlos Ruiz','#8b5cf6','300 111 2233',true),
-  ('b2','Andrés Peña','#06b6d4','301 444 5566',true),
-  ('b3','Diego Mora','#ec4899','302 777 8899',true)
+  ('11111111-1111-1111-1111-111111111101','Carlos Ruiz','#8b5cf6','300 111 2233',true),
+  ('11111111-1111-1111-1111-111111111102','Andrés Peña','#06b6d4','301 444 5566',true),
+  ('11111111-1111-1111-1111-111111111103','Diego Mora','#ec4899','302 777 8899',true)
 on conflict (id) do nothing;
 
 insert into barberia.servicios (id, nombre, precio, duracion, activo) values
-  ('s1','Corte clásico',25000,30,true),
-  ('s2','Corte + barba',35000,50,true),
-  ('s3','Perfilado de barba',15000,20,true),
-  ('s4','Diseño de cejas',10000,15,true),
-  ('s5','Corte niños',20000,25,true)
+  ('22222222-2222-2222-2222-222222222201','Corte clásico',25000,30,true),
+  ('22222222-2222-2222-2222-222222222202','Corte + barba',35000,50,true),
+  ('22222222-2222-2222-2222-222222222203','Perfilado de barba',15000,20,true),
+  ('22222222-2222-2222-2222-222222222204','Diseño de cejas',10000,15,true),
+  ('22222222-2222-2222-2222-222222222205','Corte niños',20000,25,true)
 on conflict (id) do nothing;
 
 insert into barberia.productos (id, nombre, precio, stock, activo, categoria) values
-  ('p1','Pomada mate',22000,14,true,'Peinado'),
-  ('p2','Cera de barba',18000,8,true,'Barba'),
-  ('p3','Shampoo de menta',16000,20,true,'Lavado'),
-  ('p4','Aceite de barba',28000,5,true,'Barba'),
-  ('p5','Gel fijador',12000,3,true,'Peinado')
+  ('33333333-3333-3333-3333-333333333301','Pomada mate',22000,14,true,'Peinado'),
+  ('33333333-3333-3333-3333-333333333302','Cera de barba',18000,8,true,'Barba'),
+  ('33333333-3333-3333-3333-333333333303','Shampoo de menta',16000,20,true,'Lavado'),
+  ('33333333-3333-3333-3333-333333333304','Aceite de barba',28000,5,true,'Barba'),
+  ('33333333-3333-3333-3333-333333333305','Gel fijador',12000,3,true,'Peinado')
 on conflict (id) do nothing;
 
 insert into barberia.clientes (id, nombre, telefono, notas) values
-  ('c1','Juan Pérez','310 555 1234','Prefiere degradado bajo'),
-  ('c2','Mateo Gómez','320 444 5566',''),
-  ('c3','Sofía Ramírez','315 333 7788','Corte femenino'),
-  ('c4','Andrés López','312 666 9900',''),
-  ('c5','Camilo Torres','318 111 2233','Alérgico a loción con alcohol')
+  ('44444444-4444-4444-4444-444444444401','Juan Pérez','310 555 1234','Prefiere degradado bajo'),
+  ('44444444-4444-4444-4444-444444444402','Mateo Gómez','320 444 5566',''),
+  ('44444444-4444-4444-4444-444444444403','Sofía Ramírez','315 333 7788','Corte femenino'),
+  ('44444444-4444-4444-4444-444444444404','Andrés López','312 666 9900',''),
+  ('44444444-4444-4444-4444-444444444405','Camilo Torres','318 111 2233','Alérgico a loción con alcohol')
 on conflict (telefono) do nothing;
