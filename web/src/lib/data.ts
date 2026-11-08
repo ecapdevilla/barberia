@@ -468,6 +468,29 @@ export async function deleteBarbero(id: string) {
 /* Gastos / Compras                                                   */
 /* ------------------------------------------------------------------ */
 
+export async function getUserOrgs(userId: string): Promise<{ id: string; nombre: string; slug: string; rol: string }[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("membresias")
+    .select("organizacion_id, rol, organizaciones(id, nombre, slug)")
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r: { organizacion_id: string; rol: string; organizaciones: { id: string; nombre: string; slug: string }[] | null }) => {
+    const org = Array.isArray(r.organizaciones) ? r.organizaciones[0] : r.organizaciones;
+    return {
+      id: org?.id ?? r.organizacion_id,
+      nombre: org?.nombre ?? "",
+      slug: org?.slug ?? "",
+      rol: r.rol,
+    };
+  });
+}
+
+export async function cambiarOrgActiva(orgId: string) {
+  const { error } = await getSupabase().rpc("cambiar_org_activa", { p_org_id: orgId });
+  if (error) throw new Error(error.message);
+}
+
 export async function crearOrganizacion(nombre: string, slug: string): Promise<string> {
   const { data, error } = await getSupabase().rpc("crear_organizacion", {
     p_nombre: nombre,

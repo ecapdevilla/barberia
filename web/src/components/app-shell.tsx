@@ -26,6 +26,8 @@ import {
   deleteBarbero,
   createGasto,
   deleteGasto,
+  getUserOrgs,
+  cambiarOrgActiva,
 } from "@/lib/data";
 import { LoginScreen, LoadingScreen, ConfigScreen, NoProfileScreen, CreateOrgScreen } from "./auth-screens";
 import {
@@ -186,6 +188,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
   const [modal, setModal] = useState<React.ReactNode | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [searchCliente, setSearchCliente] = useState("");
+  const [userOrgs, setUserOrgs] = useState<{ id: string; nombre: string; slug: string; rol: string }[]>([]);
   const [analisisPeriodo, setAnalisisPeriodo] = useState<"7" | "30" | "all">("7");
   const [analisisBarbero, setAnalisisBarbero] = useState<string>("");
   const [reportesDesde, setReportesDesde] = useState<string>("");
@@ -214,6 +217,12 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (profile.id) {
+      getUserOrgs(profile.id).then(setUserOrgs).catch(() => setUserOrgs([]));
+    }
+  }, [profile.id]);
 
   const toast = useCallback((msg: string, type: Toast["type"] = "success") => {
     const id = uid("t");
@@ -248,6 +257,24 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
           <div className="brand-sub">Sistema de gestión</div>
         </div>
       </div>
+      {userOrgs.length > 1 && (
+        <div style={{ padding: "0 12px 12px" }}>
+          <select
+            value={state.organizacion?.id || ""}
+            onChange={async (e) => {
+              try {
+                await cambiarOrgActiva(e.target.value);
+                window.location.reload();
+              } catch (err) {
+                toast(errMsg(err), "error");
+              }
+            }}
+            style={{ width: "100%", padding: "6px 8px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12 }}
+          >
+            {userOrgs.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+          </select>
+        </div>
+      )}
       <div className="nav-section-label">Principal</div>
       <button className={"nav-item" + (view === "dashboard" ? " active" : "")} onClick={() => setViewFn("dashboard")}>
         <LayoutDashboard  />

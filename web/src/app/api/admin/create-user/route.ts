@@ -104,5 +104,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // membresía (si la tabla existe; ignorar error si no)
+  await admin
+    .schema("barberia")
+    .from("membresias")
+    .upsert({ user_id: userId, organizacion_id: adminOrgId, rol }, { onConflict: "user_id,organizacion_id" })
+    .then(() => {}, () => {});
+
   return NextResponse.json({ ok: true, user_id: userId, email, rol });
 }
