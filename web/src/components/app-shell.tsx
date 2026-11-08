@@ -169,6 +169,10 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
   const [searchCliente, setSearchCliente] = useState("");
   const [analisisPeriodo, setAnalisisPeriodo] = useState<"7" | "30" | "all">("7");
   const [analisisBarbero, setAnalisisBarbero] = useState<string>("");
+  const [reportesDesde, setReportesDesde] = useState<string>("");
+  const [reportesHasta, setReportesHasta] = useState<string>("");
+  const [reportesBarbero, setReportesBarbero] = useState<string>("");
+  const [reportesMetodo, setReportesMetodo] = useState<string>("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const reload = useCallback(
@@ -1483,64 +1487,119 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
 
   // ---------- REPORTES VIEW ----------
   const renderReportes = () => {
+    const hoy = todayStr();
+    const desde = reportesDesde || (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().split("T")[0]; })();
+    const hasta = reportesHasta || hoy;
+
+    const inRange = (fecha: string) => fecha >= desde && fecha <= hasta;
+
+    const pagosF = state.pagos.filter((p) => inRange(p.fecha.split("T")[0]) && (!reportesBarbero || byId(state.citas, p.citaId)?.barberoId === reportesBarbero) && (!reportesMetodo || p.metodo === reportesMetodo));
+    const ventasF = state.ventas.filter((v) => inRange(v.fecha.split("T")[0]) && (!reportesBarbero || v.barberoId === reportesBarbero) && (!reportesMetodo || v.metodo === reportesMetodo));
+    const citasF = state.citas.filter((c) => inRange(c.fecha) && (!reportesBarbero || c.barberoId === reportesBarbero));
+
     const days: string[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
+    const d0 = new Date(desde + "T12:00:00");
+    const d1 = new Date(hasta + "T12:00:00");
+    const totalDias = Math.round((d1.getTime() - d0.getTime()) / 86400000) + 1;
+    const mostrar = Math.min(totalDias, 30);
+    const inicio = new Date(d1);
+    inicio.setDate(inicio.getDate() - (mostrar - 1));
+    for (let i = 0; i < mostrar; i++) {
+      const d = new Date(inicio);
+      d.setDate(d.getDate() + i);
       days.push(d.toISOString().split("T")[0]);
     }
-    const ingresosPorDia = days.map((d) => state.pagos.filter((p) => p.fecha?.startsWith(d)).reduce((a, p) => a + p.monto, 0) + state.ventas.filter((v) => v.fecha.startsWith(d)).reduce((a, v) => a + v.total, 0));
+
+    const ingresosPorDia = days.map((d) => pagosF.filter((p) => p.fecha?.startsWith(d)).reduce((a, p) => a + p.monto, 0) + ventasF.filter((v) => v.fecha.startsWith(d)).reduce((a, v) => a + v.total, 0));
     const maxIngreso = Math.max(...ingresosPorDia, 1);
-    const totalSemana = ingresosPorDia.reduce((a, b) => a + b, 0);
+    const totalPeriodo = ingresosPorDia.reduce((a, b) => a + b, 0);
+    const totalPagosCount = pagosF.length + ventasF.length;
+    const totalMonto = pagosF.reduce((a, p) => a + p.monto, 0) + ventasF.reduce((a, v) => a + v.total, 0);
+    const ticketProm = totalPagosCount ? Math.round(totalMonto / totalPagosCount) : 0;
+
     const porBarbero = state.barberos.map((b) => ({
       barbero: b,
-      total: state.pagos.filter((p) => {
-        const c = byId(state.citas, p.citaId);
-        return c?.barberoId === b.id && days.includes(c.fecha);
-      }).reduce((a, p) => a + p.monto, 0) + state.ventas.filter((v) => v.barberoId === b.id && days.includes(v.fecha.split("T")[0])).reduce((a, v) => a + v.total, 0),
+      total: pagosF.filter((p) => byId(state.citas, p.citaId)?.barberoId === b.id).reduce((a, p) => a + p.monto, 0) + ventasF.filter((v) => v.barberoId === b.id).reduce((a, v) => a + v.total, 0),
+      citas: citasF.filter((c) => c.barberoId === b.id && c.estado === "atendida").length,
     })).sort((a, b) => b.total - a.total);
-    const totalPagosCount = state.pagos.length + state.ventas.length;
-    const totalMonto = state.pagos.reduce((a, p) => a + p.monto, 0) + state.ventas.reduce((a, v) => a + v.total, 0);
     const maxBarbero = Math.max(...porBarbero.map((x) => x.total), 1);
+
     const porServicio = state.servicios.map((s) => ({
       servicio: s,
-      count: state.citas.filter((c) => c.servicioId === s.id && days.includes(c.fecha) && ["atendida", "confirmada"].includes(c.estado)).length,
+      count: citasF.filter((c) => c.servicioId === s.id && ["atendida", "confirmada"].includes(c.estado)).length,
     })).sort((a, b) => b.count - a.count);
     const maxServ = Math.max(...porServicio.map((x) => x.count), 1);
+
     const porProducto = state.productos.map((prod) => ({
       producto: prod,
-      count: state.ventas.filter((v) => v.fecha.split("T")[0] && days.includes(v.fecha.split("T")[0])).reduce((acc, v) => {
+      count: ventasF.reduce((acc, v) => {
         const it = v.items.find((i) => i.productoId === prod.id);
         return acc + (it ? it.cantidad : 0);
       }, 0),
     })).sort((a, b) => b.count - a.count);
     const maxProd = Math.max(...porProducto.map((x) => x.count), 1);
 
+    const metodos: Record<string, number> = {};
+    pagosF.forEach((p) => { metodos[p.metodo] = (metodos[p.metodo] || 0) + p.monto; });
+    ventasF.forEach((v) => { metodos[v.metodo] = (metodos[v.metodo] || 0) + v.total; });
+    const metodoEntries = Object.entries(metodos).sort((a, b) => b[1] - a[1]);
+    const maxMetodo = Math.max(...metodoEntries.map((x) => x[1]), 1);
+
     return (
       <div className="view">
+        <div className="card" style={{ marginBottom: 20, padding: 14 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <div className="field" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11, color: "var(--text-3)" }}>Desde</label>
+              <input type="date" value={desde} onChange={(e) => setReportesDesde(e.target.value)} style={{ padding: "6px 8px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }} />
+            </div>
+            <div className="field" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11, color: "var(--text-3)" }}>Hasta</label>
+              <input type="date" value={hasta} onChange={(e) => setReportesHasta(e.target.value)} style={{ padding: "6px 8px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }} />
+            </div>
+            <div className="field" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11, color: "var(--text-3)" }}>Barbero</label>
+              <select value={reportesBarbero} onChange={(e) => setReportesBarbero(e.target.value)} style={{ padding: "6px 8px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}>
+                <option value="">Todos</option>
+                {state.barberos.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+              </select>
+            </div>
+            <div className="field" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11, color: "var(--text-3)" }}>Método</label>
+              <select value={reportesMetodo} onChange={(e) => setReportesMetodo(e.target.value)} style={{ padding: "6px 8px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}>
+                <option value="">Todos</option>
+                <option value="efectivo">Efectivo</option>
+                <option value="nequi">Nequi</option>
+                <option value="transferencia">Transferencia</option>
+              </select>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setReportesDesde(""); setReportesHasta(""); setReportesBarbero(""); setReportesMetodo(""); }}>Limpiar</button>
+          </div>
+        </div>
+
         <div className="grid grid-3" style={{ marginBottom: 20 }}>
           <div className="card stat-card">
             <div className="stat-icon green"><DollarSign /></div>
-            <div className="stat-label">Ingresos 7 días</div>
-            <div className="stat-value">{fmtMoney(totalSemana)}</div>
-            <div className="stat-hint">Semana actual</div>
+            <div className="stat-label">Ingresos del período</div>
+            <div className="stat-value">{fmtMoney(totalPeriodo)}</div>
+            <div className="stat-hint">{desde} → {hasta}</div>
           </div>
           <div className="card stat-card">
             <div className="stat-icon purple"><Calendar /></div>
-            <div className="stat-label">Citas totales</div>
-            <div className="stat-value">{state.citas.length}</div>
-            <div className="stat-hint">Histórico</div>
+            <div className="stat-label">Citas atendidas</div>
+            <div className="stat-value">{citasF.filter((c) => c.estado === "atendida").length}</div>
+            <div className="stat-hint">En el período</div>
           </div>
           <div className="card stat-card">
             <div className="stat-icon blue"><Clock /></div>
             <div className="stat-label">Ticket promedio</div>
-            <div className="stat-value">{fmtMoney(totalPagosCount ? Math.round(totalMonto / totalPagosCount) : 0)}</div>
+            <div className="stat-value">{fmtMoney(ticketProm)}</div>
             <div className="stat-hint">Servicios + productos</div>
           </div>
         </div>
 
         <div className="card" style={{ marginBottom: 20 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>Ingresos últimos 7 días</h3>
+          <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>Ingresos por día</h3>
           <div className="bar-chart">
             {days.map((d, i) => {
               const h = (ingresosPorDia[i] / maxIngreso) * 100;
@@ -1556,39 +1615,40 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
           </div>
         </div>
 
-        <div className="grid grid-3" style={{ marginBottom: 20 }}>
+        <div className="grid grid-2" style={{ marginBottom: 20 }}>
           <div className="card">
-            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Productos más vendidos (7 días)</h3>
-            {porProducto.map((x) => (
-              <div key={x.producto.id} style={{ marginBottom: 14 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{x.producto.nombre}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700 }}>{x.count} u.</span>
-                </div>
-                <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 4, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: (x.count / maxProd) * 100 + "%", background: "linear-gradient(90deg,#10b981,#3b82f6)", borderRadius: 4, transition: "width 0.5s" }} />
-                </div>
-              </div>
-            ))}
-            {porProducto.length === 0 && <div style={{ fontSize: 13, color: "var(--text-3)" }}>Sin ventas de productos</div>}
-          </div>
-        </div>
-
-        <div className="grid grid-2">
-          <div className="card">
-            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Ingresos por barbero (7 días)</h3>
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Ingresos por barbero</h3>
             {porBarbero.map((x) => (
               <div key={x.barbero.id} style={{ marginBottom: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                   <span style={{ fontSize: 13, fontWeight: 600 }}>{x.barbero.nombre}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700 }}>{fmtMoney(x.total)}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{fmtMoney(x.total)} · {x.citas} citas</span>
                 </div>
                 <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 4, overflow: "hidden" }}>
                   <div style={{ height: "100%", width: (x.total / maxBarbero) * 100 + "%", background: x.barbero.color, borderRadius: 4, transition: "width 0.5s" }} />
                 </div>
               </div>
             ))}
+            {porBarbero.length === 0 && <div style={{ fontSize: 13, color: "var(--text-3)" }}>Sin datos</div>}
           </div>
+          <div className="card">
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Métodos de pago</h3>
+            {metodoEntries.map(([metodo, monto]) => (
+              <div key={metodo} style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, textTransform: "capitalize" }}>{metodo}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{fmtMoney(monto)}</span>
+                </div>
+                <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: (monto / maxMetodo) * 100 + "%", background: "linear-gradient(90deg,#8b5cf6,#ec4899)", borderRadius: 4, transition: "width 0.5s" }} />
+                </div>
+              </div>
+            ))}
+            {metodoEntries.length === 0 && <div style={{ fontSize: 13, color: "var(--text-3)" }}>Sin pagos en el período</div>}
+          </div>
+        </div>
+
+        <div className="grid grid-2" style={{ marginBottom: 20 }}>
           <div className="card">
             <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Servicios más solicitados</h3>
             {porServicio.map((x) => (
@@ -1602,6 +1662,22 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
                 </div>
               </div>
             ))}
+            {porServicio.every((x) => x.count === 0) && <div style={{ fontSize: 13, color: "var(--text-3)" }}>Sin servicios</div>}
+          </div>
+          <div className="card">
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Productos más vendidos</h3>
+            {porProducto.map((x) => (
+              <div key={x.producto.id} style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{x.producto.nombre}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{x.count} u.</span>
+                </div>
+                <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: (x.count / maxProd) * 100 + "%", background: "linear-gradient(90deg,#10b981,#3b82f6)", borderRadius: 4, transition: "width 0.5s" }} />
+                </div>
+              </div>
+            ))}
+            {porProducto.every((x) => x.count === 0) && <div style={{ fontSize: 13, color: "var(--text-3)" }}>Sin ventas de productos</div>}
           </div>
         </div>
       </div>
