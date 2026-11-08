@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import type { AppState, Profile } from "@/lib/types";
@@ -28,7 +28,7 @@ import {
   LayoutDashboard, Calendar, Users, Scissors, User, Wallet, BarChart3,
   Menu, CalendarDays, Banknote, Smartphone, ArrowLeftRight, DollarSign,
   Clock, XCircle, CheckCircle2, Info, AlertTriangle, Package, ShoppingBag,
-  LogOut, RefreshCw
+  LogOut, RefreshCw, TrendingUp
 } from "lucide-react";
 
 const VIEW_META: Record<string, { title: string; sub: string }> = {
@@ -41,6 +41,7 @@ const VIEW_META: Record<string, { title: string; sub: string }> = {
   barberos: { title: "Barberos", sub: "Equipo de trabajo" },
   caja: { title: "Caja", sub: "Cobros y cierre del día" },
   reportes: { title: "Reportes", sub: "Métricas del negocio" },
+  analisis: { title: "Análisis", sub: "Análisis avanzado de datos" },
 };
 
 type Toast = { id: string; msg: string; type: "success" | "error" | "info" };
@@ -165,6 +166,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
   const [modal, setModal] = useState<React.ReactNode | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [searchCliente, setSearchCliente] = useState("");
+  const [analisisPeriodo, setAnalisisPeriodo] = useState<"7" | "30" | "all">("7");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const reload = useCallback(
@@ -258,6 +260,10 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
       <button className={"nav-item" + (view === "reportes" ? " active" : "")} onClick={() => setViewFn("reportes")}>
         <BarChart3  />
         <span>Reportes</span>
+      </button>
+      <button className={"nav-item" + (view === "analisis" ? " active" : "")} onClick={() => setViewFn("analisis")}>
+        <TrendingUp  />
+        <span>Análisis</span>
       </button>
       <div className="sidebar-footer">
         <div className="user-chip" onClick={handleSignOut} title="Cerrar sesión">
@@ -1596,6 +1602,192 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
     );
   };
 
+  const renderAnalisis = () => {
+    const dias = analisisPeriodo === "all" ? 365 : Number(analisisPeriodo);
+    const days: string[] = [];
+    for (let i = dias - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      days.push(d.toISOString().split("T")[0]);
+    }
+    const inRange = (fecha: string) => days.includes(fecha.split("T")[0]);
+
+    const pagosR = state.pagos.filter((p) => inRange(p.fecha));
+    const ventasR = state.ventas.filter((v) => inRange(v.fecha));
+    const citasR = state.citas.filter((c) => inRange(c.fecha));
+
+    const totalIngresos = pagosR.reduce((a, p) => a + p.monto, 0) + ventasR.reduce((a, v) => a + v.total, 0);
+    const ticketProm = (pagosR.length + ventasR.length) ? Math.round(totalIngresos / (pagosR.length + ventasR.length)) : 0;
+    const citasAtendidas = citasR.filter((c) => c.estado === "atendida").length;
+
+    const porBarbero = state.barberos.map((b) => ({
+      barbero: b,
+      total: pagosR.filter((p) => {
+        const c = byId(state.citas, p.citaId);
+        return c?.barberoId === b.id;
+      }).reduce((a, p) => a + p.monto, 0) + ventasR.filter((v) => v.barberoId === b.id).reduce((a, v) => a + v.total, 0),
+      citas: citasR.filter((c) => c.barberoId === b.id && c.estado === "atendida").length,
+    })).sort((a, b) => b.total - a.total);
+    const maxBarbero = Math.max(...porBarbero.map((x) => x.total), 1);
+
+    const porServicio = state.servicios.map((s) => ({
+      servicio: s,
+      count: citasR.filter((c) => c.servicioId === s.id && c.estado === "atendida").length,
+      ingreso: citasR.filter((c) => c.servicioId === s.id && c.estado === "atendida").reduce((a, c) => {
+        const svc = byId(state.servicios, c.servicioId);
+        return a + (svc?.precio || 0);
+      }, 0),
+    })).sort((a, b) => b.count - a.count);
+    const maxServ = Math.max(...porServicio.map((x) => x.count), 1);
+
+    const metodos: Record<string, number> = {};
+    pagosR.forEach((p) => { metodos[p.metodo] = (metodos[p.metodo] || 0) + p.monto; });
+    ventasR.forEach((v) => { metodos[v.metodo] = (metodos[v.metodo] || 0) + v.total; });
+    const metodoEntries = Object.entries(metodos).sort((a, b) => b[1] - a[1]);
+    const maxMetodo = Math.max(...metodoEntries.map((x) => x[1]), 1);
+
+    const porProducto = state.productos.map((prod) => ({
+      producto: prod,
+      count: ventasR.reduce((acc, v) => {
+        const it = v.items.find((i) => i.productoId === prod.id);
+        return acc + (it ? it.cantidad : 0);
+      }, 0),
+      ingreso: ventasR.reduce((acc, v) => {
+        const it = v.items.find((i) => i.productoId === prod.id);
+        return acc + (it ? it.cantidad * it.precioUnitario : 0);
+      }, 0),
+    })).sort((a, b) => b.count - a.count).slice(0, 5);
+    const maxProd = Math.max(...porProducto.map((x) => x.count), 1);
+
+    const ingresosPorDia = days.map((d) =>
+      pagosR.filter((p) => p.fecha?.startsWith(d)).reduce((a, p) => a + p.monto, 0) +
+      ventasR.filter((v) => v.fecha.startsWith(d)).reduce((a, v) => a + v.total, 0)
+    );
+    const maxDia = Math.max(...ingresosPorDia, 1);
+
+    return (
+      <div className="view">
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+          {(["7", "30", "all"] as const).map((p) => (
+            <button key={p} className={"btn btn-sm " + (analisisPeriodo === p ? "btn-primary" : "btn-ghost")} onClick={() => setAnalisisPeriodo(p)}>
+              {p === "7" ? "7 dias" : p === "30" ? "30 dias" : "Todo"}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-4" style={{ marginBottom: 20 }}>
+          <div className="card stat-card">
+            <div className="stat-icon green"><DollarSign /></div>
+            <div className="stat-label">Ingresos totales</div>
+            <div className="stat-value">{fmtMoney(totalIngresos)}</div>
+            <div className="stat-hint">{analisisPeriodo === "all" ? "Historico" : "Ultimos " + analisisPeriodo + " dias"}</div>
+          </div>
+          <div className="card stat-card">
+            <div className="stat-icon purple"><Calendar /></div>
+            <div className="stat-label">Citas atendidas</div>
+            <div className="stat-value">{citasAtendidas}</div>
+            <div className="stat-hint">En el periodo</div>
+          </div>
+          <div className="card stat-card">
+            <div className="stat-icon blue"><Clock /></div>
+            <div className="stat-label">Ticket promedio</div>
+            <div className="stat-value">{fmtMoney(ticketProm)}</div>
+            <div className="stat-hint">Servicios + productos</div>
+          </div>
+          <div className="card stat-card">
+            <div className="stat-icon" style={{ background: "linear-gradient(135deg,#f59e0b,#ef4444)" }}><ShoppingBag /></div>
+            <div className="stat-label">Ventas de productos</div>
+            <div className="stat-value">{ventasR.length}</div>
+            <div className="stat-hint">{fmtMoney(ventasR.reduce((a, v) => a + v.total, 0))}</div>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>Ingresos por dia</h3>
+          <div className="bar-chart">
+            {days.slice(-14).map((d) => {
+              const idx = days.indexOf(d);
+              const h = (ingresosPorDia[idx] / maxDia) * 100;
+              return (
+                <div key={d} className="bar-item">
+                  <div style={{ flex: 1, display: "flex", alignItems: "flex-end", width: "100%" }}>
+                    <div className="bar" style={{ height: Math.max(h, 2) + "%" }} title={fmtMoney(ingresosPorDia[idx])} />
+                  </div>
+                  <div className="bar-label">{fmtDateShort(d)}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid grid-2" style={{ marginBottom: 20 }}>
+          <div className="card">
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Top barberos por ingresos</h3>
+            {porBarbero.map((x) => (
+              <div key={x.barbero.id} style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{x.barbero.nombre}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{fmtMoney(x.total)} · {x.citas} citas</span>
+                </div>
+                <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: (x.total / maxBarbero) * 100 + "%", background: x.barbero.color, borderRadius: 4, transition: "width 0.5s" }} />
+                </div>
+              </div>
+            ))}
+            {porBarbero.length === 0 && <div style={{ fontSize: 13, color: "var(--text-3)" }}>Sin datos</div>}
+          </div>
+          <div className="card">
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Metodos de pago</h3>
+            {metodoEntries.map(([metodo, monto]) => (
+              <div key={metodo} style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, textTransform: "capitalize" }}>{metodo}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{fmtMoney(monto)}</span>
+                </div>
+                <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: (monto / maxMetodo) * 100 + "%", background: "linear-gradient(90deg,#8b5cf6,#ec4899)", borderRadius: 4, transition: "width 0.5s" }} />
+                </div>
+              </div>
+            ))}
+            {metodoEntries.length === 0 && <div style={{ fontSize: 13, color: "var(--text-3)" }}>Sin pagos en el periodo</div>}
+          </div>
+        </div>
+
+        <div className="grid grid-2" style={{ marginBottom: 20 }}>
+          <div className="card">
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Servicios mas solicitados</h3>
+            {porServicio.map((x) => (
+              <div key={x.servicio.id} style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{x.servicio.nombre}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{x.count} · {fmtMoney(x.ingreso)}</span>
+                </div>
+                <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: (x.count / maxServ) * 100 + "%", background: "linear-gradient(90deg,var(--accent),var(--accent-3))", borderRadius: 4, transition: "width 0.5s" }} />
+                </div>
+              </div>
+            ))}
+            {porServicio.length === 0 && <div style={{ fontSize: 13, color: "var(--text-3)" }}>Sin servicios</div>}
+          </div>
+          <div className="card">
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>Productos mas vendidos</h3>
+            {porProducto.map((x) => (
+              <div key={x.producto.id} style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{x.producto.nombre}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{x.count} u. · {fmtMoney(x.ingreso)}</span>
+                </div>
+                <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: (x.count / maxProd) * 100 + "%", background: "linear-gradient(90deg,#10b981,#3b82f6)", borderRadius: 4, transition: "width 0.5s" }} />
+                </div>
+              </div>
+            ))}
+            {porProducto.every((x) => x.count === 0) && <div style={{ fontSize: 13, color: "var(--text-3)" }}>Sin ventas de productos</div>}
+          </div>
+        </div>
+      </div>
+    );
+  };
   const topbarActions = () => {
     if (view === "dashboard") {
       return (
@@ -1660,6 +1852,7 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
       case "barberos": return renderBarberos();
       case "caja": return renderCaja();
       case "reportes": return renderReportes();
+      case "analisis": return renderAnalisis();
       default: return null;
     }
   };
