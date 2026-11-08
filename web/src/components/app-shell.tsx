@@ -2420,6 +2420,22 @@ function BarberiaApp({ profile, onSignOut }: { profile: Profile; onSignOut: () =
             <button className="btn btn-primary" onClick={openCreateUserModal}><Plus /> Nuevo usuario</button>
           </div>
           <div className="card">
+            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Enlace de reservas (clientes)</h3>
+            <p style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 14 }}>
+              Comparte este enlace para que tus clientes agenden citas en línea.
+            </p>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <code style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "var(--text)", flex: 1, minWidth: 200, overflow: "hidden", textOverflow: "ellipsis" }}>
+                {typeof window !== "undefined" ? window.location.origin : ""}/reservar/{state.organizacion?.slug || "tu-slug"}
+              </code>
+              <button className="btn btn-ghost btn-sm" onClick={() => {
+                const url = (typeof window !== "undefined" ? window.location.origin : "") + "/reservar/" + (state.organizacion?.slug || "");
+                navigator.clipboard.writeText(url).then(() => toast("Enlace copiado", "success")).catch(() => toast("No se pudo copiar", "error"));
+              }}>Copiar</button>
+            </div>
+          </div>
+
+          <div className="card">
             <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Respaldo de datos</h3>
             <p style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 14 }}>
               Descarga un JSON con todos los datos actuales (barberos, servicios, productos, clientes, citas, pagos, ventas, cierres).
